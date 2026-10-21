@@ -3504,7 +3504,7 @@
         <option>histogram</option>
       </enum>
     </type>
-    <default>waveform</default>
+    <default>histogram</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>

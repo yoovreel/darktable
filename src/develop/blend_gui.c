@@ -1914,6 +1914,22 @@ dt_iop_module_t *dt_iop_gui_blend_new_mask_adjustment(void)
   dt_iop_module_t *base = dt_iop_get_module_from_list(dev->iop, "exposure");
   if(!base) return NULL;
 
+  // an empty mask is reused rather than piling up another one
+  for(const GList *l = dev->iop; l; l = g_list_next(l))
+  {
+    dt_iop_module_t *m = l->data;
+    int k = 0;
+    if(!strcmp(m->op, "exposure") && m->blend_data
+       && sscanf(m->multi_name, "mask %d", &k) == 1
+       && !_mask_has_elements(dt_masks_gui_module_mask_group(m)))
+    {
+      dt_dev_modulegroups_switch(dev, m);
+      dt_iop_request_focus(m);
+      dt_iop_gui_set_expanded(m, TRUE, TRUE);
+      return m;
+    }
+  }
+
   dt_iop_module_t *dst = dt_iop_gui_duplicate(base, FALSE);
   if(!dst || !dst->blend_data) return NULL;
 
