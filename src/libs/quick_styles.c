@@ -112,8 +112,20 @@ static gboolean _swatch_draw(GtkWidget *w, cairo_t *cr, dt_lib_module_t *self)
   cairo_surface_t *s = style ? g_hash_table_lookup(d->swatches, style) : NULL;
   if(!s)
   {
-    cairo_set_source_rgb(cr, 0.16, 0.16, 0.17);
+    // rendering every style through the pixelpipe made the editor sluggish,
+    // so each preset gets a gradient derived from its name instead
+    const guint h = style ? g_str_hash(style) : 0;
+    const double h1 = (h % 360) / 360.0, h2 = ((h / 360) % 360) / 360.0;
+    const double c1[3] = { 0.66 + 0.18 * sin(6.283 * h1), 0.56 + 0.14 * sin(6.283 * h1 + 2.1),
+                           0.46 + 0.16 * sin(6.283 * h1 + 4.2) };
+    const double c2[3] = { 0.46 + 0.14 * sin(6.283 * h2 + 1.0), 0.40 + 0.12 * sin(6.283 * h2 + 3.0),
+                           0.36 + 0.14 * sin(6.283 * h2 + 5.0) };
+    cairo_pattern_t *g = cairo_pattern_create_linear(0, 0, W, H);
+    cairo_pattern_add_color_stop_rgb(g, 0, CLAMP(c1[0], 0, 1), CLAMP(c1[1], 0, 1), CLAMP(c1[2], 0, 1));
+    cairo_pattern_add_color_stop_rgb(g, 1, CLAMP(c2[0], 0, 1), CLAMP(c2[1], 0, 1), CLAMP(c2[2], 0, 1));
+    cairo_set_source(cr, g);
     cairo_paint(cr);
+    cairo_pattern_destroy(g);
     return TRUE;
   }
   // fill the swatch with the middle of the photo
@@ -130,6 +142,8 @@ static gboolean _swatch_draw(GtkWidget *w, cairo_t *cr, dt_lib_module_t *self)
 static void _swatches_request(dt_lib_module_t *self, GList *names)
 {
   dt_lib_quick_styles_t *d = self->data;
+  // swatches are gradients now; see _swatch_draw
+  if(TRUE) return;
   const dt_imgid_t imgid = darktable.develop ? darktable.develop->image_storage.id : NO_IMGID;
   if(!dt_is_valid_imgid(imgid)) return;
   if(imgid != d->swatch_imgid)
