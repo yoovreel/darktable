@@ -430,3 +430,41 @@ scrollbar slider
 {
   color: @m_on_accent;
 }
+
+/* ---- masks as layers (left panel) ----------------------------------------- */
+#mask-layers .dt_mask_layer
+{
+  border-radius: 8px;
+  padding: 0 0.14em;
+}
+
+#mask-layers .dt_mask_layer:hover
+{
+  background-color: @m_raised;
+}
+
+#mask-layers .dt_mask_layer.dt_mask_layer_active
+{
+  background-color: @m_active;
+}
+
+#mask-layers .dt_mask_layer button
+{
+  border: 0;
+  background-color: transparent;
+  padding: 0.28em 0.42em;
+}
+
+.dt_mask_layers_new
+{
+  margin: 0.42em 0.28em 0.14em 0.28em;
+  border: 1px dashed @m_line2;
+  background-color: transparent;
+  color: @m_text2;
+}
+
+.dt_mask_layers_new:hover
+{
+  border-color: @m_accent;
+  color: @m_accent;
+}

@@ -6,7 +6,7 @@ add_definitions(-include common/module_api.h)
 add_definitions(-include libs/lib_api.h)
 
 # The modules
-set(MODULES import export copy_history styles tagging image select collect recentcollect filtering metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks_flexi_host session duplicate ioporder quick_styles)
+set(MODULES import export copy_history styles tagging image select collect recentcollect filtering metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks_flexi_host session duplicate ioporder quick_styles mask_layers)
 
 # The tools
 set(MODULES ${MODULES} viewswitcher)
@@ -51,6 +51,7 @@ add_library(session MODULE "session.c")
 add_library(duplicate MODULE "duplicate.c")
 add_library(ioporder MODULE "ioporder.c")
 add_library(quick_styles MODULE "quick_styles.c")
+add_library(mask_layers MODULE "mask_layers.c")
 
 # tools
 add_library(viewswitcher MODULE "tools/viewswitcher.c")
