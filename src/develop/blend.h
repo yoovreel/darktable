@@ -975,8 +975,14 @@ void dt_iop_gui_blend_masks_panel_relocate(dt_iop_module_t *module);
 // arrow, the shortcut and the toolbar button all come here, so they cannot
 // drift apart. Does nothing unless the focused module has a masks panel
 void dt_iop_gui_blend_masks_panel_toggle(void);
+// start a new local adjustment: a "mask N" exposure instance with a drawn mask
+// and its panel open. Returns the new instance, or NULL
+struct dt_iop_module_t *dt_iop_gui_blend_new_mask_adjustment(void);
 // open the focused module's mask panel where it is hosted, if it is folded
 void dt_iop_gui_blend_masks_panel_show(void);
+// open the focused module's mask panel, wherever it is hosted, going by what is
+// on screen rather than the stored fold state
+void dt_iop_gui_blend_masks_panel_open(void);
 // the canvas panel changed sides: lay its header out for the new one
 void dt_iop_gui_blend_masks_panel_side_changed(void);
 // the tooltip of both buttons that display the mask: the overlay in the mask

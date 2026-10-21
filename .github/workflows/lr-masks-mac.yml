@@ -61,7 +61,10 @@ jobs:
         run: |
           cmake -E make_directory "${BUILD_DIR}";
           cmake -E make_directory "${INSTALL_PREFIX}";
-          ./src/.ci/ci-script.sh;
+          set -o pipefail
+          ./src/.ci/ci-script.sh 2>&1 | tee build.log || {
+            grep -E "error:|Error |FAILED:" build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1; }
       - name: Build macOS package
         run: ./src/packaging/macosx/3_make_hb_darktable_package.sh
       - name: Create DMG file

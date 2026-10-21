@@ -1530,6 +1530,42 @@ static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpo
   g_free(src_name);
 }
 
+// the tool strip's "masks" button: Lightroom starts a mask with its own set
+// of adjustments. Here that is a new exposure instance, named "mask N", with
+// a drawn mask switched on and its masks panel open, so the next step is
+// picking a shape or an AI object
+dt_iop_module_t *dt_iop_gui_blend_new_mask_adjustment(void)
+{
+  dt_develop_t *dev = darktable.develop;
+  if(!dev) return NULL;
+  dt_iop_module_t *base = dt_iop_get_module_from_list(dev->iop, "exposure");
+  if(!base) return NULL;
+
+  dt_iop_module_t *dst = dt_iop_gui_duplicate(base, FALSE);
+  if(!dst || !dst->blend_data) return NULL;
+
+  int n = 1;
+  for(const GList *l = dev->iop; l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *m = l->data;
+    int k = 0;
+    if(sscanf(m->multi_name, "mask %d", &k) == 1 && k >= n) n = k + 1;
+  }
+  gchar *label = g_strdup_printf(_("mask %d"), n);
+  dt_iop_update_multi_name(dst, label, TRUE, TRUE, TRUE);
+  g_free(label);
+  dt_iop_gui_update_header(dst);
+
+  if(!dst->enabled && dst->off)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dst->off), TRUE);
+  dt_dev_modulegroups_switch(dev, dst);
+  dt_iop_request_focus(dst);
+  dt_iop_gui_set_expanded(dst, TRUE, TRUE);
+  if(dst->blend_data && ((dt_iop_gui_blend_data_t *)dst->blend_data)->shapes_support)
+    _blendop_mask_enable(dst);
+  return dst;
+}
+
 static void _masks_use_in_btn_pressed(GtkGestureSingle *gesture,
                                       const int n_press,
                                       const double x,

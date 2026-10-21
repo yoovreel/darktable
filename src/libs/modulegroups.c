@@ -222,7 +222,8 @@ gboolean expandable(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  return 999;
+  // 999 is the tool strip's, between the histogram and this
+  return 998;
 }
 
 static GtkWidget *_buttons_get_from_pos(dt_lib_module_t *self, const int pos)
@@ -464,6 +465,33 @@ static void _manage_direct_module_popup(GtkGestureSingle *gesture,
                                         gdouble y,
                                         dt_lib_module_t *self);
 
+// the quick access panel's sections, named as in other editors' basic panel
+static const char *_basics_last_section = NULL;
+
+static const char *_basics_section(const char *op)
+{
+  static const struct { const char *op, *section; } map[] = {
+    { "temperature", N_("white balance") },  { "channelmixerrgb", N_("white balance") },
+    { "exposure", N_("light") },             { "agx", N_("light") },
+    { "filmicrgb", N_("light") },            { "sigmoid", N_("light") },
+    { "toneequal", N_("light") },            { "rgblevels", N_("light") },
+    { "shadhi", N_("light") },               { "basecurve", N_("light") },
+    { "rgbcurve", N_("light") },             { "tonecurve", N_("light") },
+    { "colorbalancergb", N_("presence") },   { "bilat", N_("presence") },
+    { "hazeremoval", N_("presence") },       { "velvia", N_("presence") },
+    { "vibrance", N_("presence") },          { "colorequal", N_("color") },
+    { "colorzones", N_("color") },           { "sharpen", N_("detail") },
+    { "denoiseprofile", N_("detail") },      { "nlmeans", N_("detail") },
+    { "diffuse", N_("detail") },             { "lens", N_("optics") },
+    { "ashift", N_("geometry") },            { "crop", N_("geometry") },
+    { "flip", N_("geometry") },              { "vignette", N_("effects") },
+    { "grain", N_("effects") },
+  };
+  for(size_t i = 0; i < G_N_ELEMENTS(map); i++)
+    if(!strcmp(op, map[i].op)) return map[i].section;
+  return NULL;
+}
+
 static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_item_t *item, GtkWidget *w,
                                dt_lib_modulegroups_basic_item_position_t item_pos)
 {
@@ -689,11 +717,29 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
 
       gtk_widget_set_valign(btn, GTK_ALIGN_CENTER);
       dt_gui_add_class(btn, "dt_transparent_background");
-      // we add to the module header the section label and the link to the full iop
-      GtkWidget *sect = dt_ui_section_label_new(item->module->name());
-      gtk_label_set_xalign(GTK_LABEL(sect), 0.5); // we center the module name
-      gtk_widget_show(sect);
-      gtk_box_pack_start(GTK_BOX(header_box), sect, TRUE, TRUE, 0);
+      // the header names the kind of adjustment, as an editor's basic panel
+      // does (white balance, light, presence…); the module doing it follows,
+      // dimmed. Modules of the section just started only show their name
+      if(item_pos == FIRST_MODULE) _basics_last_section = NULL;
+      const char *section = _basics_section(item->module->op);
+      if(section && g_strcmp0(section, _basics_last_section))
+      {
+        gchar *up = g_utf8_strup(_(section), -1);
+        GtkWidget *sect = gtk_label_new(up);
+        g_free(up);
+        gtk_label_set_xalign(GTK_LABEL(sect), 0.0);
+        dt_gui_add_class(sect, "dt_basics_section");
+        gtk_widget_show(sect);
+        gtk_box_pack_start(GTK_BOX(header_box), sect, FALSE, FALSE, 0);
+      }
+      _basics_last_section = section;
+
+      GtkWidget *modname = gtk_label_new(item->module->name());
+      gtk_label_set_xalign(GTK_LABEL(modname), section ? 1.0 : 0.0);
+      gtk_label_set_ellipsize(GTK_LABEL(modname), PANGO_ELLIPSIZE_END);
+      dt_gui_add_class(modname, section ? "dt_basics_module" : "dt_basics_section");
+      gtk_widget_show(modname);
+      gtk_box_pack_start(GTK_BOX(header_box), modname, TRUE, TRUE, 0);
     }
     else if(item_pos == FIRST_MODULE)
       // if there is no label, we handle separately in css the first module header

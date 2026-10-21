@@ -261,3 +261,104 @@ scrollbar slider
 {
   color: @m_accent;
 }
+
+/* ---- tool strip (edit, crop, remove, masks, effects) ---------------------- */
+#tool-strip
+{
+  background-color: @m_card;
+  border: 1px solid @m_line;
+  border-radius: 12px;
+  margin: 0.42em 0.5em 0.14em 0.5em;
+  padding: 0.21em;
+}
+
+#tool-strip .dt_tool_btn
+{
+  border: 0;
+  border-radius: 9px;
+  padding: 0.42em 0.14em 0.35em 0.14em;
+  background-color: transparent;
+  color: @m_muted;
+}
+
+#tool-strip .dt_tool_btn label
+{
+  font-size: 0.9em;
+  font-weight: 500;
+}
+
+#tool-strip .dt_tool_btn:hover
+{
+  background-color: @m_raised;
+  color: @m_text;
+}
+
+#tool-strip .dt_tool_btn.dt_tool_active
+{
+  background-color: @m_active;
+  color: @m_text;
+}
+
+#tool-strip .dt_tool_btn.dt_tool_active label
+{
+  color: @m_accent;
+}
+
+/* ---- quick access panel as a basic panel ----------------------------------- */
+#basics-box,
+#basics-box-labels
+{
+  background-color: @m_card;
+  border: 1px solid @m_line;
+  border-radius: 12px;
+  margin: 0.28em 0.5em;
+  padding: 0.28em 0.42em 0.56em 0.42em;
+}
+
+#basics-header-box
+{
+  margin-top: 0.7em;
+  padding: 0 0.14em;
+  background-color: transparent;
+}
+
+#basics-header-box .dt_basics_section
+{
+  color: @m_faint;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+#basics-header-box .dt_basics_module
+{
+  color: alpha(@m_faint, 0.6);
+  font-size: 0.82em;
+  margin: 0 0.42em;
+}
+
+/* the header buttons only matter when reached for */
+#basics-header-box #quick-presets,
+#basics-header-box #quick-reset,
+#basics-header-box #basics-link
+{
+  opacity: 0.45;
+}
+
+#basics-header-box:hover #quick-presets,
+#basics-header-box:hover #quick-reset,
+#basics-header-box:hover #basics-link
+{
+  opacity: 1;
+}
+
+/* retouch, AI remove: the one line explaining the tool */
+.dt_retouch_ai_hint
+{
+  color: @m_muted;
+  background-color: alpha(@m_accent, 0.08);
+  border: 1px solid alpha(@m_accent, 0.25);
+  border-radius: 8px;
+  padding: 0.42em 0.56em;
+  margin: 0.42em 0;
+}

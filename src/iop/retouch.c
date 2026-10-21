@@ -156,6 +156,8 @@ typedef struct dt_iop_retouch_gui_data_t
   GtkWidget *bt_paste_scale;
 
   GtkWidget *vbox_preview_scale;
+  GtkWidget *vbox_wavelet; // the wavelet section, hidden for AI remove
+  GtkWidget *lbl_ai_hint;
 
   GtkDarktableGradientSlider *preview_levels_gslider;
 
@@ -482,7 +484,13 @@ static void rt_show_hide_controls(const dt_iop_module_t *self)
       break;
   }
 
-  if(g->display_wavelet_scale)
+  // AI remove works on the whole image: the wavelet scales do not apply, and
+  // the panel is down to the tool and a word on what it does
+  const gboolean ai = p->algorithm == DT_IOP_RETOUCH_AI;
+  gtk_widget_set_visible(g->vbox_wavelet, !ai);
+  gtk_widget_set_visible(g->lbl_ai_hint, ai);
+
+  if(g->display_wavelet_scale && !ai)
     gtk_widget_show(GTK_WIDGET(g->vbox_preview_scale));
   else
     gtk_widget_hide(GTK_WIDGET(g->vbox_preview_scale));
@@ -2700,13 +2708,24 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->sl_mask_opacity), "value-changed",
                    G_CALLBACK(rt_mask_opacity_callback), self);
 
+  g->vbox_wavelet = dt_gui_vbox
+    (dt_ui_section_label_new(C_("section", "wavelet decompose")),
+     grid_wd_labels, g->wd_bar,
+     dt_gui_hbox(scale_start, dt_gui_expand(scale_middle), dt_gui_expand(scale_end)));
+
+  g->lbl_ai_hint = gtk_label_new(_("paint over a person, sign or object: the AI fills it"
+                                   " with matching background.\nruns on this computer, offline"));
+  gtk_label_set_line_wrap(GTK_LABEL(g->lbl_ai_hint), TRUE);
+  gtk_label_set_xalign(GTK_LABEL(g->lbl_ai_hint), 0.0);
+  dt_gui_add_class(g->lbl_ai_hint, "dt_retouch_ai_hint");
+  gtk_widget_set_no_show_all(g->lbl_ai_hint, TRUE);
+
   // start building top level widget
   self->widget = dt_gui_vbox
     (dt_ui_section_label_new(C_("section", "retouch tools")),
      hbox_shapes, hbox_algo,
-     dt_ui_section_label_new(C_("section", "wavelet decompose")),
-     grid_wd_labels, g->wd_bar,
-     dt_gui_hbox(scale_start, dt_gui_expand(scale_middle), dt_gui_expand(scale_end)),
+     g->lbl_ai_hint,
+     g->vbox_wavelet,
      g->vbox_preview_scale,
      dt_ui_section_label_new(C_("section", "shapes")),
      hbox_shape_sel, g->vbox_blur, g->vbox_fill, g->sl_mask_opacity);

@@ -138,6 +138,21 @@ void dt_iop_gui_blend_masks_panel_show(void)
   if(_masks_panel_collapsed_pref()) dt_iop_gui_blend_masks_panel_toggle();
 }
 
+void dt_iop_gui_blend_masks_panel_open(void)
+{
+  dt_iop_module_t *module = dt_dev_gui_module();
+  if(!module || !module->blend_data) return;
+  if(dt_masks_gui_panel_position() == MASKS_PANEL_POS_EMBEDDED)
+  {
+    // as the arrow does: go by what is on screen, not the stored state
+    const dt_iop_gui_blend_data_t *bd = module->blend_data;
+    if(bd->masks_panel_body && !gtk_widget_get_visible(GTK_WIDGET(bd->masks_panel_body)))
+      dt_iop_gui_blend_masks_panel_toggle();
+  }
+  else
+    dt_iop_gui_blend_masks_panel_show();
+}
+
 void dt_iop_gui_blend_masks_panel_fold_unmasked(void)
 {
   dt_iop_module_t *module = dt_dev_gui_module();
