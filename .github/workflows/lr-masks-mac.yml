@@ -1,18 +1,18 @@
 name: LR masks macOS build
 
 # Builds the macOS (Apple silicon) app of this fork's lr-masks branch and
-# publishes the .dmg on the "lr-masks-latest" release of this repository.
+# publishes the .dmg on the "lr-masks-lite" release of this repository.
 
 on:
   push:
-    branches: [ lr-masks ]
+    branches: [ lr-masks-lite ]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: lr-masks-mac
+  group: lr-masks-lite-mac
   cancel-in-progress: true
 
 jobs:
@@ -74,19 +74,19 @@ jobs:
           cd ${SRC_DIR}
           echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           echo "ARCHITECTURE=$(uname -m)" >> $GITHUB_ENV
-      - name: Publish on the lr-masks-latest release
+      - name: Publish on the lr-masks-lite release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           DMG="${INSTALL_PREFIX}/darktable-${VERSION}-${ARCHITECTURE}.dmg"
-          OUT="${INSTALL_PREFIX}/darktable-lr-masks-${ARCHITECTURE}.dmg"
+          OUT="${INSTALL_PREFIX}/darktable-lr-masks-lite-${ARCHITECTURE}.dmg"
           cp "$DMG" "$OUT"
           cd ${SRC_DIR}
-          gh release view lr-masks-latest -R ${{ github.repository }} > /dev/null 2>&1 || \
-            gh release create lr-masks-latest -R ${{ github.repository }} --prerelease \
+          gh release view lr-masks-lite -R ${{ github.repository }} > /dev/null 2>&1 || \
+            gh release create lr-masks-lite -R ${{ github.repository }} --prerelease \
               --title "darktable with Lightroom-style masks (latest)" \
-              --notes "Built from the lr-masks branch. Development build: back up your library first." \
+              --notes "Built from the lr-masks-lite branch. Development build: back up your library first." \
               --target ${{ github.sha }}
-          gh release upload lr-masks-latest "$OUT" --clobber -R ${{ github.repository }}
-          gh release edit lr-masks-latest -R ${{ github.repository }} \
-            --notes "Built from the lr-masks branch at ${{ github.sha }} (darktable ${VERSION}). Development build: back up your library first."
+          gh release upload lr-masks-lite "$OUT" --clobber -R ${{ github.repository }}
+          gh release edit lr-masks-lite -R ${{ github.repository }} \
+            --notes "Built from the lr-masks-lite branch at ${{ github.sha }} (darktable ${VERSION}). Development build: back up your library first."
