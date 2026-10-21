@@ -95,6 +95,11 @@ static void _image_changed(gpointer instance, dt_lib_module_t *self)
   _update(self);
 }
 
+static void _before_after_clicked(GtkButton *button, dt_lib_module_t *self)
+{
+  dt_action_process("lib/snapshots/before and after", 0, NULL, NULL, 1.0f);
+}
+
 static void _export_clicked(GtkButton *button, dt_lib_module_t *self)
 {
   if(dt_action_process("lib/export/start export", 0, NULL, NULL, 1.0f) == DT_ACTION_NOT_VALID)
@@ -125,11 +130,13 @@ void gui_init(dt_lib_module_t *self)
 
   d->roll = gtk_label_new("");
   gtk_label_set_ellipsize(GTK_LABEL(d->roll), PANGO_ELLIPSIZE_START);
+  gtk_label_set_width_chars(GTK_LABEL(d->roll), 4);
   dt_gui_add_class(d->roll, "dt_edit_header_roll");
   GtkWidget *dot = gtk_label_new("·");
   dt_gui_add_class(dot, "dt_edit_header_roll");
   d->file = gtk_label_new("");
   gtk_label_set_ellipsize(GTK_LABEL(d->file), PANGO_ELLIPSIZE_MIDDLE);
+  gtk_label_set_width_chars(GTK_LABEL(d->file), 6);
   dt_gui_add_class(d->file, "dt_edit_header_file");
 
   GtkWidget *export = gtk_button_new_with_label(_("export"));
@@ -142,7 +149,14 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), d->roll, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), dot, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->file, FALSE, FALSE, 0);
+  GtkWidget *ba = gtk_button_new_with_label(_("before/after"));
+  dt_gui_add_class(ba, "dt_edit_header_ba");
+  gtk_widget_set_tooltip_text(ba, _("compare with the original photo (\\)\n"
+                                    "drag the line on the image to move the split"));
+  g_signal_connect(ba, "clicked", G_CALLBACK(_before_after_clicked), self);
+
   gtk_box_pack_end(GTK_BOX(self->widget), export, FALSE, FALSE, 0);
+  gtk_box_pack_end(GTK_BOX(self->widget), ba, FALSE, FALSE, 0);
   gtk_widget_set_hexpand(self->widget, TRUE);
   gtk_widget_show_all(self->widget);
 

@@ -417,7 +417,7 @@ scrollbar slider
   color: @m_on_accent;
   border: 0;
   border-radius: 8px;
-  padding: 0.21em 1.1em;
+  padding: 0.14em 0.84em;
   font-weight: 600;
 }
 
@@ -467,4 +467,12 @@ scrollbar slider
 {
   border-color: @m_accent;
   color: @m_accent;
+}
+
+#edit-header .dt_edit_header_ba
+{
+  background-color: @m_raised;
+  border: 1px solid @m_line2;
+  border-radius: 8px;
+  padding: 0.14em 0.56em;
 }
