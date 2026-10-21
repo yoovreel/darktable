@@ -1778,6 +1778,8 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
     AM("colorequal/graph");                        \
     AM("colorequal/node placement");               \
     AM("exposure/exposure");                       \
+    AM("shadhi/shadows");                          \
+    AM("shadhi/highlights");                       \
     if(!is_scene_referred)                         \
     {                                              \
       /* contrast is already in filmic/sigmoid */  \
@@ -1797,6 +1799,7 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       AM("contrastntexture/fine details");         \
     else                                           \
       AM("bilat/detail");                          \
+    AM("hazeremoval/strength");                    \
   }
 
 // start module group
