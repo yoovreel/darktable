@@ -4893,7 +4893,7 @@ int process_cl(dt_iop_module_t *self,
   dt_iop_retouch_gui_data_t *g = self->gui_data;
 
   // AI remove runs on the CPU: hand the whole module over to process()
-  for(int i = 0; i < RETOUCH_NO_FORMS; i++)
+  for(int i = 0; i < (int)G_N_ELEMENTS(p->rt_forms); i++)
     if(dt_is_valid_maskid(p->rt_forms[i].formid)
        && p->rt_forms[i].algorithm == DT_IOP_RETOUCH_AI)
       return DT_OPENCL_PROCESS_CL;
