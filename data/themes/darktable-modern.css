@@ -393,3 +393,40 @@ scrollbar slider
   color: @m_faint;
   margin: 0.56em;
 }
+
+/* ---- edit header (above the image in the darkroom) ----------------------- */
+#edit-header
+{
+  margin: 0 0.56em;
+}
+
+#edit-header .dt_edit_header_roll
+{
+  color: @m_faint;
+}
+
+#edit-header .dt_edit_header_file
+{
+  color: @m_text;
+  font-weight: 500;
+}
+
+#edit-header .dt_edit_header_export
+{
+  background-color: @m_accent;
+  color: @m_on_accent;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.21em 1.1em;
+  font-weight: 600;
+}
+
+#edit-header .dt_edit_header_export:hover
+{
+  background-color: shade(@m_accent, 1.12);
+}
+
+#edit-header .dt_edit_header_export label
+{
+  color: @m_on_accent;
+}
