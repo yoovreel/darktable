@@ -1463,19 +1463,18 @@ static gchar *_masks_use_in_label(dt_iop_module_t *src)
   return label;
 }
 
-static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpointer user_data)
+// a new instance of `op` that follows src's mask; NULL, with a message, when
+// it cannot. `quiet`: no message on success, and the focus stays on src (the
+// mask's own sliders call this while they are being dragged)
+static dt_iop_module_t *_masks_use_in_create(dt_iop_module_t *src,
+                                             const char *op,
+                                             const gboolean quiet)
 {
-  dt_iop_module_t *src = (dt_iop_module_t *)user_data;
-  if(darktable.gui->active_popover_menu)
-    gtk_popover_popdown(GTK_POPOVER(darktable.gui->active_popover_menu));
-  if(!src || !src->blend_data) return;
-
-  const char *op = g_variant_get_string(parameter, NULL);
   dt_iop_module_t *base = _masks_use_in_base(op, src);
   if(!base)
   {
     dt_control_log(_("%s can't use a mask"), dt_iop_get_localized_name(op));
-    return;
+    return NULL;
   }
 
   const gboolean has_raster =
@@ -1485,7 +1484,7 @@ static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpo
   if(!has_raster && !shapes)
   {
     dt_control_log(_("this mask has nothing that can be shared yet"));
-    return;
+    return NULL;
   }
 
   gchar *label = _masks_use_in_label(src);
@@ -1496,18 +1495,20 @@ static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpo
     g_list_free(shapes);
     g_free(label);
     g_free(src_name);
-    return;
+    return NULL;
   }
   dt_iop_update_multi_name(dst, label, TRUE, TRUE, TRUE);
   dt_iop_gui_update_header(dst);
 
+  gboolean linked = TRUE;
   dt_iop_gui_blend_data_t *dbd = dst->blend_data;
   if(has_raster && dst->iop_order > src->iop_order)
   {
     // the whole mask, parametric channels and all, kept up to date
     _add_raster_mask(dst, src, BLEND_RASTER_ID);
-    dt_control_log(_("%s now follows the mask of %s"),
-                   dt_iop_get_localized_name(dst->op), src_name);
+    if(!quiet)
+      dt_control_log(_("%s now follows the mask of %s"),
+                     dt_iop_get_localized_name(dst->op), src_name);
   }
   else if(shapes && dbd->shapes_support)
   {
@@ -1518,16 +1519,225 @@ static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpo
     if(has_raster)
       dt_control_log(_("%s runs earlier, so it shares the shapes and AI objects of %s"),
                      dt_iop_get_localized_name(dst->op), src_name);
-    else
+    else if(!quiet)
       dt_control_log(_("%s now shares the shapes of %s"),
                      dt_iop_get_localized_name(dst->op), src_name);
   }
   else
+  {
     dt_control_log(_("%s can't read this mask"), dt_iop_get_localized_name(dst->op));
+    linked = FALSE;
+  }
+
+  if(quiet)
+  {
+    // back to the mask being adjusted
+    dt_iop_gui_set_expanded(dst, FALSE, FALSE);
+    dt_iop_request_focus(src);
+    dt_iop_gui_set_expanded(src, TRUE, FALSE);
+  }
 
   g_list_free(shapes);
   g_free(label);
   g_free(src_name);
+  return linked ? dst : NULL;
+}
+
+static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpointer user_data)
+{
+  dt_iop_module_t *src = (dt_iop_module_t *)user_data;
+  if(darktable.gui->active_popover_menu)
+    gtk_popover_popdown(GTK_POPOVER(darktable.gui->active_popover_menu));
+  if(!src || !src->blend_data) return;
+  _masks_use_in_create(src, g_variant_get_string(parameter, NULL), FALSE);
+}
+
+// ---- "adjust this mask": Lightroom-style sliders on the mask itself --------
+// Each slider drives one parameter of a module instance that follows this
+// module's mask; the first move creates that instance (as "use this mask
+// in…" does, named after the mask), later moves find it again by name.
+// When the slider's module is this module itself, it is adjusted directly.
+
+typedef struct _masks_adjust_t
+{
+  const char *label;
+  const char *op;
+  const char *field;  // NULL: temp and tint, which share the midtones' color
+  float min, max;
+  float scale;        // parameter = slider value * scale
+  int digits;
+  const char *unit;
+} _masks_adjust_t;
+
+#define _ADJ_TEMP 0
+#define _ADJ_TINT 1
+static const _masks_adjust_t _masks_adjusts[] = {
+  { N_("temp"),       "colorbalancergb",  NULL,                -100.f, 100.f, 0.f,    0, "" },
+  { N_("tint"),       "colorbalancergb",  NULL,                -100.f, 100.f, 0.f,    0, "" },
+  { N_("exposure"),   "exposure",         "exposure",            -3.f,   3.f, 1.f,    2, " EV" },
+  { N_("contrast"),   "colorbalancergb",  "contrast",          -100.f, 100.f, 0.01f,  0, "" },
+  { N_("highlights"), "colorbalancergb",  "highlights_Y",      -100.f, 100.f, 0.01f,  0, "" },
+  { N_("shadows"),    "colorbalancergb",  "shadows_Y",         -100.f, 100.f, 0.01f,  0, "" },
+  { N_("blacks"),     "colorbalancergb",  "global_Y",          -100.f, 100.f, 0.001f, 0, "" },
+  { N_("texture"),    "contrastntexture", "gain_fine",         -100.f, 100.f, 0.01f,  0, "" },
+  { N_("clarity"),    "contrastntexture", "gain_medium",       -100.f, 100.f, 0.01f,  0, "" },
+  { N_("dehaze"),     "hazeremoval",      "strength",          -100.f, 100.f, 0.01f,  0, "" },
+  { N_("vibrance"),   "colorbalancergb",  "vibrance",          -100.f, 100.f, 0.01f,  0, "" },
+  { N_("saturation"), "colorbalancergb",  "saturation_global", -100.f, 100.f, 0.01f,  0, "" },
+  { N_("sharpness"),  "sharpen",          "amount",               0.f, 100.f, 0.02f,  0, "" },
+};
+#define _N_ADJUSTS G_N_ELEMENTS(_masks_adjusts)
+
+// warm is a hue of 45°, magenta 315°: two axes at right angles, so temp and
+// tint add up as a vector, whose angle and length set the midtones' color
+#define _ADJ_WARM_HUE 45.f
+#define _ADJ_TINT_HUE 315.f
+#define _ADJ_MAX_CHROMA 0.25f
+
+// the instance a slider drives, or NULL when it has none yet
+static dt_iop_module_t *_masks_adjust_target(dt_iop_module_t *src, const char *op)
+{
+  if(!strcmp(src->op, op)) return src;
+  gchar *label = _masks_use_in_label(src);
+  dt_iop_module_t *found = NULL;
+  for(GList *l = darktable.develop->iop; l && !found; l = g_list_next(l))
+  {
+    dt_iop_module_t *m = l->data;
+    if(strcmp(m->op, op) || !m->multi_name_hand_edited) continue;
+    gchar *name = dt_util_localize_segmented_name(m->multi_name, FALSE);
+    if(!g_strcmp0(name, label)) found = m;
+    g_free(name);
+  }
+  g_free(label);
+  return found;
+}
+
+static float *_masks_adjust_field(dt_iop_module_t *m, const char *field)
+{
+  return (m && m->so && m->so->get_p) ? (float *)m->so->get_p(m->params, field) : NULL;
+}
+
+static void _masks_adjust_changed(GtkWidget *slider, dt_iop_module_t *src)
+{
+  if(darktable.gui->reset) return;
+  dt_iop_gui_blend_data_t *bd = src->blend_data;
+  if(!bd) return;
+  const int i = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(slider), "dt-adjust-index"));
+  const _masks_adjust_t *a = &_masks_adjusts[i];
+  const float v = dt_bauhaus_slider_get(slider);
+
+  dt_iop_module_t *m = _masks_adjust_target(src, a->op);
+  if(!m)
+  {
+    if(v == 0.0f) return;
+    if(!_mask_has_elements(dt_masks_gui_module_mask_group(src)))
+    {
+      dt_control_log(_("add an AI object, shape or range to this mask first"));
+      return;
+    }
+    m = _masks_use_in_create(src, a->op, TRUE);
+    if(!m) return;
+  }
+
+  if(a->field)
+  {
+    float *f = _masks_adjust_field(m, a->field);
+    if(!f) return;
+    *f = v * a->scale;
+  }
+  else
+  {
+    // temp and tint together set the midtones' hue and chroma
+    float *h = _masks_adjust_field(m, "midtones_H");
+    float *c = _masks_adjust_field(m, "midtones_C");
+    if(!h || !c) return;
+    const float t = dt_bauhaus_slider_get(bd->masks_adjust_sliders[_ADJ_TEMP]) / 100.f;
+    const float n = dt_bauhaus_slider_get(bd->masks_adjust_sliders[_ADJ_TINT]) / 100.f;
+    const float x = t * cosf(deg2radf(_ADJ_WARM_HUE)) + n * cosf(deg2radf(_ADJ_TINT_HUE));
+    const float y = t * sinf(deg2radf(_ADJ_WARM_HUE)) + n * sinf(deg2radf(_ADJ_TINT_HUE));
+    const float len = fminf(sqrtf(x * x + y * y), 1.0f);
+    float hue = rad2degf(atan2f(y, x));
+    if(hue < 0.0f) hue += 360.0f;
+    *h = hue;
+    *c = len * _ADJ_MAX_CHROMA;
+  }
+
+  ++darktable.gui->reset;
+  dt_iop_gui_update(m);
+  --darktable.gui->reset;
+  dt_dev_add_history_item(darktable.develop, m, TRUE);
+}
+
+// the sliders show what the instances they drive hold now
+static void _masks_adjust_refresh(dt_iop_module_t *src)
+{
+  dt_iop_gui_blend_data_t *bd = src->blend_data;
+  if(!bd || !bd->masks_adjust_box) return;
+  ++darktable.gui->reset;
+  for(int i = 0; i < _N_ADJUSTS; i++)
+  {
+    const _masks_adjust_t *a = &_masks_adjusts[i];
+    GtkWidget *w = bd->masks_adjust_sliders[i];
+    if(!w) continue;
+    dt_iop_module_t *m = _masks_adjust_target(src, a->op);
+    float v = 0.0f;
+    if(m && a->field)
+    {
+      const float *f = _masks_adjust_field(m, a->field);
+      if(f && a->scale != 0.0f) v = *f / a->scale;
+      // a module adjusted here only shows its value once it is in use
+      if(m != src && !m->enabled) v = 0.0f;
+    }
+    else if(m && m->enabled)
+    {
+      const float *h = _masks_adjust_field(m, "midtones_H");
+      const float *c = _masks_adjust_field(m, "midtones_C");
+      if(h && c)
+      {
+        const float len = *c / _ADJ_MAX_CHROMA;
+        const float x = len * cosf(deg2radf(*h)), y = len * sinf(deg2radf(*h));
+        // project onto the two axes, which are at right angles
+        const float axis = deg2radf(i == _ADJ_TEMP ? _ADJ_WARM_HUE : _ADJ_TINT_HUE);
+        v = 100.f * (x * cosf(axis) + y * sinf(axis));
+      }
+    }
+    dt_bauhaus_slider_set(w, v);
+  }
+  --darktable.gui->reset;
+}
+
+static GtkWidget *_masks_adjust_box_new(dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  GtkWidget *box = dt_gui_vbox();
+  dt_gui_add_class(box, "dt_masks_adjust");
+  GtkWidget *label = dt_ui_section_label_new(C_("section", "adjust this mask"));
+  gtk_widget_set_tooltip_text(label,
+                              _("Lightroom-style sliders for this mask. Moving one adds a module\n"
+                                "instance that follows this mask (named after it) and sets it"));
+  dt_gui_box_add(box, label);
+  for(int i = 0; i < _N_ADJUSTS; i++)
+  {
+    const _masks_adjust_t *a = &_masks_adjusts[i];
+    GtkWidget *w = dt_bauhaus_slider_new_with_range(module, a->min, a->max, 0.0f, 0.0f, a->digits);
+    dt_bauhaus_widget_set_label(w, N_("adjust mask"), a->label);
+    if(a->unit[0]) dt_bauhaus_slider_set_format(w, a->unit);
+    if(i == _ADJ_TEMP)
+      dt_bauhaus_slider_set_stop(w, 0.0f, 0.30f, 0.45f, 0.85f),
+      dt_bauhaus_slider_set_stop(w, 1.0f, 0.90f, 0.75f, 0.30f);
+    else if(i == _ADJ_TINT)
+      dt_bauhaus_slider_set_stop(w, 0.0f, 0.35f, 0.70f, 0.40f),
+      dt_bauhaus_slider_set_stop(w, 1.0f, 0.75f, 0.35f, 0.70f);
+    g_object_set_data(G_OBJECT(w), "dt-adjust-index", GINT_TO_POINTER(i));
+    g_signal_connect(G_OBJECT(w), "value-changed", G_CALLBACK(_masks_adjust_changed), module);
+    bd->masks_adjust_sliders[i] = w;
+    dt_gui_box_add(box, w);
+    gtk_widget_show(w);
+  }
+  gtk_widget_show(label);
+  gtk_widget_show(box);
+  bd->masks_adjust_box = box;
+  return box;
 }
 
 static void _masks_use_in_btn_pressed(GtkGestureSingle *gesture,
@@ -17449,7 +17659,8 @@ void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
 
     // layout: toolbar -> element list, on one ground. The list opens on the
     // mask's own group, whose header carries the whole-mask actions
-    bd->masks_list_area = dt_gui_vbox(toolbar, GTK_WIDGET(bd->masks_list_box));
+    bd->masks_list_area = dt_gui_vbox(toolbar, GTK_WIDGET(bd->masks_list_box),
+                                      _masks_adjust_box_new(module));
     gtk_widget_set_name(bd->masks_list_area, "masks-list-area");
     gtk_widget_set_no_show_all(bd->masks_list_area, TRUE);
     bd->masks_box = GTK_BOX(dt_gui_vbox(bd->masks_list_area));
@@ -17801,6 +18012,8 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
 
   if(darktable.develop && darktable.develop->gui_module == module)
     dt_iop_gui_blend_masks_panel_relocate(module);
+
+  _masks_adjust_refresh(module);
 
   DT_LEAVE_GUI_UPDATE();
 }

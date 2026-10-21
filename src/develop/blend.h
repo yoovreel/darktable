@@ -420,6 +420,10 @@ typedef struct dt_iop_gui_blend_data_t
   // opens the menu that links or copies elements of other modules' masks, or
   // adds or uses another module's whole mask (_masks_import_btn_pressed)
   GtkWidget *masks_import_btn;
+  // "adjust this mask": Lightroom-style sliders driving instances that follow
+  // this mask (_masks_adjust_box_new in blend_gui.c)
+  GtkWidget *masks_adjust_box;
+  GtkWidget *masks_adjust_sliders[13];
   GtkWidget *masks_shapes[DEVELOP_MASKS_NB_SHAPES];
   int masks_type[DEVELOP_MASKS_NB_SHAPES];
   GtkWidget *masks_edit;
