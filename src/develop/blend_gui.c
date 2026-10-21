@@ -1402,6 +1402,171 @@ static void _masks_import_btn_pressed(GtkGestureSingle *gesture,
   g_object_unref(menu);
 }
 
+// ---- "use this mask in…" ----------------------------------------------------
+// The other direction from the import menu: from the module that holds a mask,
+// add a new instance of another module that uses the very same mask, in one
+// click. One mask, several adjustments, as in a Lightroom mask. A target
+// processed after this module reads its whole mask as a live raster element; a
+// target processed before it cannot read a mask made later in the pipe, so it
+// gets this mask's shapes and AI objects linked instead. Either way, editing
+// the mask here updates every module that uses it.
+
+// the adjustments offered, in roughly the order Lightroom lists its mask sliders
+static const char *_masks_use_in_ops[] = {
+  "exposure",         // exposure
+  "toneequal",        // highlights, shadows, whites, blacks
+  "contrastntexture", // texture, clarity
+  "bilat",            // local contrast
+  "hazeremoval",      // dehaze
+  "channelmixerrgb",  // temperature, tint
+  "colorbalancergb",  // saturation, vibrance, color grading
+  "colorequal",       // hue, saturation, brightness per color
+  "rgbcurve",         // curve
+  "sharpen",          // sharpness
+  "blurs",            // blur
+};
+
+// the instance of `op` to duplicate: preferably one processed after `src`, so
+// the new instance can read src's mask as a raster element
+static dt_iop_module_t *_masks_use_in_base(const char *op, const dt_iop_module_t *src)
+{
+  dt_iop_module_t *first = NULL, *after = NULL;
+  for(GList *l = darktable.develop->iop; l; l = g_list_next(l))
+  {
+    dt_iop_module_t *m = l->data;
+    if(strcmp(m->op, op) || dt_iop_is_hidden(m)) continue;
+    if(!(m->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || (m->flags() & IOP_FLAGS_NO_MASKS)) continue;
+    if(!first) first = m;
+    if(!after && m->iop_order > src->iop_order) after = m;
+  }
+  return after ? after : first;
+}
+
+// the name the new instance carries: the mask's own module label, so the
+// modules sharing one mask read as one set in the panel and the history
+static gchar *_masks_use_in_label(dt_iop_module_t *src)
+{
+  if(src->multi_name_hand_edited && src->multi_name[0])
+    return dt_util_localize_segmented_name(src->multi_name, FALSE);
+  gchar *name = dt_history_item_get_name(src);
+  gchar *label = g_strdup_printf(_("mask of %s"), name);
+  g_free(name);
+  return label;
+}
+
+static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpointer user_data)
+{
+  dt_iop_module_t *src = (dt_iop_module_t *)user_data;
+  if(darktable.gui->active_popover_menu)
+    gtk_popover_popdown(GTK_POPOVER(darktable.gui->active_popover_menu));
+  if(!src || !src->blend_data) return;
+
+  const char *op = g_variant_get_string(parameter, NULL);
+  dt_iop_module_t *base = _masks_use_in_base(op, src);
+  if(!base)
+  {
+    dt_control_log(_("%s can't use a mask"), dt_iop_get_localized_name(op));
+    return;
+  }
+
+  const gboolean has_raster =
+    src->raster_mask.source.masks
+    && g_hash_table_contains(src->raster_mask.source.masks, GINT_TO_POINTER(BLEND_RASTER_ID));
+  GList *shapes = dt_masks_model_module_shapes(src);
+  if(!has_raster && !shapes)
+  {
+    dt_control_log(_("this mask has nothing that can be shared yet"));
+    return;
+  }
+
+  gchar *label = _masks_use_in_label(src);
+  dt_iop_module_t *dst = dt_iop_gui_duplicate(base, FALSE);
+  if(!dst || !dst->blend_data)
+  {
+    g_list_free(shapes);
+    g_free(label);
+    return;
+  }
+  dt_iop_update_multi_name(dst, label, TRUE, TRUE, TRUE);
+  dt_iop_gui_update_header(dst);
+
+  dt_iop_gui_blend_data_t *dbd = dst->blend_data;
+  if(has_raster && dst->iop_order > src->iop_order)
+  {
+    // the whole mask, parametric channels and all, kept up to date
+    _add_raster_mask(dst, src, BLEND_RASTER_ID);
+    dt_control_log(_("%s now uses the mask of %s"),
+                   dt_iop_get_localized_name(dst->op), label);
+  }
+  else if(shapes && dbd->shapes_support)
+  {
+    if(!(dst->blend_params->mask_mode & (DEVELOP_MASK_MASK | DEVELOP_MASK_FLEXI)))
+      _blendop_mask_enable(dst);
+    _masks_import_forms(dst, src, shapes, FALSE);
+    dt_iop_request_focus(dst);
+    if(has_raster)
+      dt_control_log(_("%s comes earlier in the pipe: the shapes and AI objects of %s are"
+                       " linked, without its parametric parts"),
+                     dt_iop_get_localized_name(dst->op), label);
+    else
+      dt_control_log(_("%s now shares the shapes of %s"),
+                     dt_iop_get_localized_name(dst->op), label);
+  }
+  else
+    dt_control_log(_("%s can't read this mask"), dt_iop_get_localized_name(dst->op));
+
+  g_list_free(shapes);
+  g_free(label);
+}
+
+static void _masks_use_in_btn_pressed(GtkGestureSingle *gesture,
+                                      const int n_press,
+                                      const double x,
+                                      const double y,
+                                      dt_iop_module_t *module)
+{
+  if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY) return;
+  if(!module->blend_data) return;
+  dt_gui_claim(gesture);
+  GtkWidget *btn = dt_gui_get_widget(gesture);
+  dt_iop_request_focus(module);
+
+  if(!_mask_has_elements(dt_masks_gui_module_mask_group(module)))
+  {
+    dt_control_log(_("add an AI object, shape or range to this mask first"));
+    return;
+  }
+
+  if(gtk_widget_get_action_group(btn, "masks_use_in") == NULL)
+  {
+    GActionEntry entries[] = { { "pick", _masks_use_in_action, "s", NULL } };
+    GSimpleActionGroup *sag = g_simple_action_group_new();
+    g_action_map_add_action_entries(G_ACTION_MAP(sag), entries, G_N_ELEMENTS(entries), module);
+    gtk_widget_insert_action_group(btn, "masks_use_in", G_ACTION_GROUP(sag));
+    g_object_unref(sag);
+  }
+
+  GMenu *list = g_menu_new();
+  for(int i = 0; i < G_N_ELEMENTS(_masks_use_in_ops); i++)
+  {
+    const char *op = _masks_use_in_ops[i];
+    if(!_masks_use_in_base(op, module)) continue;
+    gchar *label = _menu_label_escape(dt_iop_get_localized_name(op));
+    GMenuItem *it = g_menu_item_new(label, NULL);
+    g_menu_item_set_action_and_target_value(it, "masks_use_in.pick", g_variant_new_string(op));
+    g_menu_append_item(list, it);
+    g_object_unref(it);
+    g_free(label);
+  }
+  GMenu *menu = g_menu_new();
+  g_menu_append_section(menu, _("adjust this mask with a new instance of"), G_MENU_MODEL(list));
+  g_object_unref(list);
+
+  darktable.gui->active_popover_menu = dt_gui_popover_menu_from_model(btn, menu);
+  gtk_popover_popup(GTK_POPOVER(darktable.gui->active_popover_menu));
+  g_object_unref(menu);
+}
+
 // edit on canvas and solo edit, as one run leading the panel header's
 // buttons: they act on the canvas, wherever the panel is hosted. Packed once,
 // into the box the header reserved for them (see masks_header_edit_box)
@@ -17224,9 +17389,23 @@ void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
     dt_gui_add_class(toolbar_gap, "dt_masks_button_gap");
     gtk_widget_show(toolbar_gap);
 
+    // "use this mask in…": beside import, its other direction (see
+    // _masks_use_in_btn_pressed)
+    GtkWidget *use_in_btn = dtgtk_button_new(dtgtk_cairo_paint_square_plus, 0, NULL);
+    gtk_widget_set_tooltip_text(use_in_btn,
+                                _("use this mask in another module: adds a new instance of it\n"
+                                  "(exposure, tone equalizer, color balance rgb…) that follows\n"
+                                  "this mask, so one mask can carry several adjustments"));
+    _press_before_widget(dt_gui_connect_click(use_in_btn, _masks_use_in_btn_pressed,
+                                              NULL, module));
+    gtk_widget_show(use_in_btn);
+    GtkWidget *share_run = dt_gui_hbox(bd->masks_import_btn, use_in_btn);
+    dt_gui_add_class(share_run, "dt_masks_button_row");
+    gtk_widget_show(share_run);
+
     GtkWidget *toolbar = dt_masks_gui_toolbar_new(bd->masks_new_op_box, shapes_box,
                                                   bd->masks_param_channels_box,
-                                                  bd->masks_import_btn, presets_btn,
+                                                  share_run, presets_btn,
                                                   toolbar_gap);
     gtk_widget_set_no_show_all(toolbar, TRUE);
     dt_gui_add_class(toolbar, "dt_masks_toolbar");

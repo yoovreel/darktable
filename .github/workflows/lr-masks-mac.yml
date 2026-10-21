@@ -1,0 +1,89 @@
+name: LR masks macOS build
+
+# Builds the macOS (Apple silicon) app of this fork's lr-masks branch and
+# publishes the .dmg on the "lr-masks-latest" release of this repository.
+
+on:
+  push:
+    branches: [ lr-masks ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lr-masks-mac
+  cancel-in-progress: true
+
+jobs:
+  macOS:
+    name: darktable lr-masks macOS arm64
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      CC: cc
+      CXX: c++
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+      SRC_DIR: ${{ github.workspace }}/src
+      BUILD_DIR: ${{ github.workspace }}/src/build
+      INSTALL_PREFIX: ${{ github.workspace }}/src/build/macosx
+      ECO: -DBINARY_PACKAGE_BUILD=ON -DBUILD_CURVE_TOOLS=ON -DBUILD_NOISE_TOOLS=ON -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF
+      CMAKE_BUILD_TYPE: Release
+      GENERATOR: Ninja
+      TARGET: skiptest
+    steps:
+      - name: Checkout
+        run: |
+          # full history: the dmg's version comes from git describe
+          git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }} src
+          pushd src
+          git fetch --tags https://github.com/darktable-org/darktable || true
+          git submodule init
+          git config submodule.src/tests/integration.update none
+          git submodule update
+          popd
+      - name: Install base dependencies
+        run: |
+          brew untap --force aws/tap || true
+          brew update > /dev/null || true
+          cd src/.ci
+          export HOMEBREW_NO_INSTALL_UPGRADE=1
+          brew bundle --verbose || true
+          # rebuild GraphicsMagick for macOS bundling
+          export HOMEBREW_NO_INSTALL_FROM_API=1
+          brew developer on
+          gm_formula=`brew edit --quiet --print-path graphicsmagick`
+          cat $gm_formula | sed 's/--with-modules/--disable-installed/1' > gm_formula.tmp
+          mv gm_formula.tmp $gm_formula
+          brew reinstall --build-from-source --force --quiet graphicsmagick
+      - name: Build and install
+        run: |
+          cmake -E make_directory "${BUILD_DIR}";
+          cmake -E make_directory "${INSTALL_PREFIX}";
+          ./src/.ci/ci-script.sh;
+      - name: Build macOS package
+        run: ./src/packaging/macosx/3_make_hb_darktable_package.sh
+      - name: Create DMG file
+        run: ./src/packaging/macosx/4_make_hb_darktable_dmg.sh
+      - name: Get version info
+        run: |
+          cd ${SRC_DIR}
+          echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
+          echo "ARCHITECTURE=$(uname -m)" >> $GITHUB_ENV
+      - name: Publish on the lr-masks-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DMG="${INSTALL_PREFIX}/darktable-${VERSION}-${ARCHITECTURE}.dmg"
+          OUT="${INSTALL_PREFIX}/darktable-lr-masks-${ARCHITECTURE}.dmg"
+          cp "$DMG" "$OUT"
+          cd ${SRC_DIR}
+          gh release view lr-masks-latest -R ${{ github.repository }} > /dev/null 2>&1 || \
+            gh release create lr-masks-latest -R ${{ github.repository }} --prerelease \
+              --title "darktable with Lightroom-style masks (latest)" \
+              --notes "Built from the lr-masks branch. Development build: back up your library first." \
+              --target ${{ github.sha }}
+          gh release upload lr-masks-latest "$OUT" --clobber -R ${{ github.repository }}
+          gh release edit lr-masks-latest -R ${{ github.repository }} \
+            --notes "Built from the lr-masks branch at ${{ github.sha }} (darktable ${VERSION}). Development build: back up your library first."
