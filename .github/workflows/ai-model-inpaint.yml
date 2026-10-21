@@ -1,0 +1,63 @@
+name: AI remove model (LaMa)
+
+# Exports LaMa to ONNX and publishes inpaint-lama.dtmodel (and the bare
+# folder as a zip) on this repository's "ai-models" release.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ lr-masks ]
+    paths: [ "tools/ai/export_lama_onnx.py", ".github/workflows/ai-model-inpaint.yml" ]
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install onnx onnxruntime numpy pillow
+      - name: Fetch LaMa
+        run: |
+          curl -sSL -o big-lama.pt https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt
+          echo "344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9  big-lama.pt" | sha256sum -c
+      - name: Export and check
+        run: python tools/ai/export_lama_onnx.py big-lama.pt model.onnx check.png
+      - name: Package
+        run: |
+          mkdir -p inpaint-lama
+          mv model.onnx inpaint-lama/
+          cat > inpaint-lama/config.json <<'JSON'
+          {
+            "id": "inpaint-lama",
+            "name": "inpaint lama",
+            "description": "LaMa (big-lama) object removal for the retouch module's AI remove tool",
+            "task": "inpaint",
+            "arch": "lama",
+            "backend": "onnx",
+            "num_inputs": 2
+          }
+          JSON
+          cat > inpaint-lama/LICENSE.txt <<'TXT'
+          LaMa: Resolution-robust Large Mask Inpainting with Fourier Convolutions
+          https://github.com/advimman/lama - Apache License 2.0
+          Weights: big-lama (TorchScript release by IOPaint, https://github.com/Sanster/models)
+          TXT
+          (cd inpaint-lama && zip -q ../inpaint-lama.dtmodel config.json model.onnx LICENSE.txt)
+          zip -qr inpaint-lama-folder.zip inpaint-lama
+          sha256sum inpaint-lama.dtmodel inpaint-lama/model.onnx > SHA256SUMS.txt
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ai-models -R ${{ github.repository }} > /dev/null 2>&1 || \
+            gh release create ai-models -R ${{ github.repository }} --prerelease \
+              --title "AI models for the custom build" \
+              --notes "inpaint-lama: LaMa (Apache-2.0) for AI remove in the retouch module." \
+              --target ${{ github.sha }}
+          gh release upload ai-models inpaint-lama.dtmodel inpaint-lama-folder.zip SHA256SUMS.txt check.png --clobber -R ${{ github.repository }}

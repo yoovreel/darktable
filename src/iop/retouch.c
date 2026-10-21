@@ -35,6 +35,9 @@
 #include "dtgtk/drawingarea.h"
 #include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
+#ifdef HAVE_AI
+#include "common/ai/inpaint.h"
+#endif
 #include <stdlib.h>
 
 // this is the version of the modules parameters,
@@ -68,7 +71,8 @@ typedef enum dt_iop_retouch_algo_type_t {
   DT_IOP_RETOUCH_CLONE = 1, // $DESCRIPTION: "clone"
   DT_IOP_RETOUCH_HEAL = 2,  // $DESCRIPTION: "heal"
   DT_IOP_RETOUCH_BLUR = 3,  // $DESCRIPTION: "blur"
-  DT_IOP_RETOUCH_FILL = 4   // $DESCRIPTION: "fill"
+  DT_IOP_RETOUCH_FILL = 4,  // $DESCRIPTION: "fill"
+  DT_IOP_RETOUCH_AI = 5     // $DESCRIPTION: "AI remove"
 } dt_iop_retouch_algo_type_t;
 
 typedef struct dt_iop_retouch_form_data_t
@@ -131,7 +135,7 @@ typedef struct dt_iop_retouch_gui_data_t
   GtkLabel *label_form;                                                   // display number of forms
   GtkLabel *label_form_selected;                                          // display number of forms selected
   GtkWidget *bt_edit_masks, *bt_path, *bt_circle, *bt_ellipse, *bt_brush; // shapes
-  GtkWidget *bt_clone, *bt_heal, *bt_blur, *bt_fill;                      // algorithms
+  GtkWidget *bt_clone, *bt_heal, *bt_blur, *bt_fill, *bt_ai;             // algorithms
   GtkWidget *bt_showmask, *bt_suppress;                                   // suppress & show masks
 
   GtkWidget *wd_bar; // wavelet decompose bar
@@ -470,6 +474,7 @@ static void rt_show_hide_controls(const dt_iop_module_t *self)
       else
         gtk_widget_hide(GTK_WIDGET(g->hbox_color_pick));
       break;
+    case DT_IOP_RETOUCH_AI:
     case DT_IOP_RETOUCH_CLONE:
     default:
       gtk_widget_hide(GTK_WIDGET(g->vbox_blur));
@@ -558,6 +563,8 @@ static void rt_shape_selection_changed(dt_iop_module_t *self)
                                    (p->algorithm == DT_IOP_RETOUCH_BLUR));
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill),
                                    (p->algorithm == DT_IOP_RETOUCH_FILL));
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ai),
+                                   (p->algorithm == DT_IOP_RETOUCH_AI));
 
       selection_changed = TRUE;
     }
@@ -1942,6 +1949,8 @@ static void rt_select_algorithm_callback(GtkGestureSingle *gesture,
     new_algo = DT_IOP_RETOUCH_HEAL;
   else if(widget == g->bt_fill)
     new_algo = DT_IOP_RETOUCH_FILL;
+  else if(widget == g->bt_ai)
+    new_algo = DT_IOP_RETOUCH_AI;
 
   // check if we have to do something
   gboolean accept = TRUE;
@@ -1958,10 +1967,11 @@ static void rt_select_algorithm_callback(GtkGestureSingle *gesture,
           && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_HEAL)
          || (new_algo == DT_IOP_RETOUCH_HEAL
              && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_CLONE)
-         || (new_algo == DT_IOP_RETOUCH_BLUR
-             && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_FILL)
-         || (new_algo == DT_IOP_RETOUCH_FILL
-             && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_BLUR))
+         || ((new_algo == DT_IOP_RETOUCH_BLUR
+              || new_algo == DT_IOP_RETOUCH_FILL
+              || new_algo == DT_IOP_RETOUCH_AI)
+             && (p->rt_forms[index].algorithm == DT_IOP_RETOUCH_CLONE
+                 || p->rt_forms[index].algorithm == DT_IOP_RETOUCH_HEAL)))
       {
         accept = FALSE;
       }
@@ -1979,6 +1989,8 @@ static void rt_select_algorithm_callback(GtkGestureSingle *gesture,
                                (p->algorithm == DT_IOP_RETOUCH_BLUR));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill),
                                (p->algorithm == DT_IOP_RETOUCH_FILL));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ai),
+                               (p->algorithm == DT_IOP_RETOUCH_AI));
 
   rt_show_hide_controls(self);
 
@@ -2334,6 +2346,8 @@ void gui_update(dt_iop_module_t *self)
                                p->algorithm == DT_IOP_RETOUCH_HEAL);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill),
                                p->algorithm == DT_IOP_RETOUCH_FILL);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ai),
+                               p->algorithm == DT_IOP_RETOUCH_AI);
 
   // update shapes toolbar
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle),
@@ -2486,6 +2500,11 @@ void gui_init(dt_iop_module_t *self)
       G_CALLBACK(rt_select_algorithm_callback),
       TRUE, 0, 0, dtgtk_cairo_paint_tool_heal, hbox_algo);
 
+  g->bt_ai = dt_iop_togglebutton_new(
+      self, N_("tools"), N_("activate AI remove tool"), NULL,
+      G_CALLBACK(rt_select_algorithm_callback),
+      TRUE, 0, 0, dtgtk_cairo_paint_masks_object, hbox_algo);
+
   // overwrite tooltip ourself to handle shift+click
   gchar b[1000];
   gchar *c = _("ctrl+click to change tool for current form");
@@ -2494,6 +2513,10 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->bt_fill , dt_buf_printf(b, "%s\n%s\n%s", _("activate fill tool"), c, s));
   gtk_widget_set_tooltip_text(g->bt_clone, dt_buf_printf(b, "%s\n%s\n%s", _("activate cloning tool"), c, s));
   gtk_widget_set_tooltip_text(g->bt_heal , dt_buf_printf(b, "%s\n%s\n%s", _("activate healing tool"), c, s));
+  gtk_widget_set_tooltip_text(g->bt_ai, dt_buf_printf(b, "%s\n%s\n%s\n%s",
+                              _("activate AI remove tool: paint over a person, sign or object\n"
+                                "and it is replaced with matching background"),
+                              _("needs the AI remove model, see preferences > AI"), c, s));
 
   // wavelet decompose bar labels
   GtkWidget *grid_wd_labels = gtk_grid_new();
@@ -3692,6 +3715,126 @@ cleanup:
   dt_free_align(img_dest);
 }
 
+// AI remove: the masked area is made up by an inpainting model from its
+// surroundings. The model sees a square crop around the mask with twice
+// its size of context, display-encoded in [0, 1] (scene values scaled by
+// the crop's bright end, then a 2.2 gamma) and the result is decoded the
+// same way and blended in with the mask, so the shape's feather and
+// opacity work as for the other tools
+static void _retouch_ai(float *const in,
+                        dt_iop_roi_t *const roi_in,
+                        float *const mask_scaled,
+                        dt_iop_roi_t *const roi_mask_scaled,
+                        const float opacity)
+{
+#ifdef HAVE_AI
+  // the mask's extent, in the layer
+  int mx0 = INT_MAX, my0 = INT_MAX, mx1 = -1, my1 = -1;
+  for(int yy = 0; yy < roi_mask_scaled->height; yy++)
+    for(int xx = 0; xx < roi_mask_scaled->width; xx++)
+      if(mask_scaled[(size_t)yy * roi_mask_scaled->width + xx] > 0.01f)
+      {
+        const int x = xx + roi_mask_scaled->x - roi_in->x;
+        const int y = yy + roi_mask_scaled->y - roi_in->y;
+        mx0 = MIN(mx0, x); mx1 = MAX(mx1, x);
+        my0 = MIN(my0, y); my1 = MAX(my1, y);
+      }
+  mx0 = MAX(mx0, 0); my0 = MAX(my0, 0);
+  mx1 = MIN(mx1, roi_in->width - 1); my1 = MIN(my1, roi_in->height - 1);
+  if(mx1 < mx0 || my1 < my0) return;
+
+  // a square crop with context, kept inside the layer
+  const int extent = MAX(mx1 - mx0 + 1, my1 - my0 + 1);
+  int side = MAX(64, (int)(extent * 2.2f));
+  const int cw = MIN(side, roi_in->width), ch = MIN(side, roi_in->height);
+  int cx0 = (mx0 + mx1) / 2 - cw / 2, cy0 = (my0 + my1) / 2 - ch / 2;
+  cx0 = CLAMP(cx0, 0, roi_in->width - cw);
+  cy0 = CLAMP(cy0, 0, roi_in->height - ch);
+
+  float *crop = dt_alloc_align_float((size_t)4 * cw * ch);
+  float *hole = dt_alloc_align_float((size_t)cw * ch);
+  if(!crop || !hole)
+  {
+    dt_free_align(crop);
+    dt_free_align(hole);
+    return;
+  }
+
+  // the mask over the crop
+  for(int y = 0; y < ch; y++)
+    for(int x = 0; x < cw; x++)
+    {
+      const int mx = x + cx0 + roi_in->x - roi_mask_scaled->x;
+      const int my = y + cy0 + roi_in->y - roi_mask_scaled->y;
+      float m = 0.0f;
+      if(mx >= 0 && my >= 0 && mx < roi_mask_scaled->width && my < roi_mask_scaled->height)
+        m = mask_scaled[(size_t)my * roi_mask_scaled->width + mx];
+      hole[(size_t)y * cw + x] = m;
+    }
+
+  // the bright end of what the model will see, from the pixels it keeps
+  float *bright = dt_alloc_align_float((size_t)cw * ch);
+  size_t nb = 0;
+  for(int y = 0; y < ch; y++)
+    for(int x = 0; x < cw; x++)
+    {
+      const float *px = in + ((size_t)(y + cy0) * roi_in->width + (x + cx0)) * 4;
+      if(bright && hole[(size_t)y * cw + x] < 0.01f)
+        bright[nb++] = fmaxf(px[0], fmaxf(px[1], px[2]));
+    }
+  float white = 1.0f;
+  if(bright && nb > 16)
+  {
+    // a cheap 99th percentile: sort a sample
+    const size_t step = MAX((size_t)1, nb / 4096);
+    size_t n = 0;
+    for(size_t k = 0; k < nb; k += step) bright[n++] = bright[k];
+    for(size_t a = 1; a < n; a++)
+    {
+      const float v = bright[a];
+      size_t b = a;
+      while(b > 0 && bright[b - 1] > v) { bright[b] = bright[b - 1]; b--; }
+      bright[b] = v;
+    }
+    white = bright[(size_t)(0.99f * (n - 1))];
+  }
+  dt_free_align(bright);
+  white = fmaxf(white, 1e-4f);
+
+  const float gamma = 1.0f / 2.2f;
+  for(int y = 0; y < ch; y++)
+    for(int x = 0; x < cw; x++)
+    {
+      const float *px = in + ((size_t)(y + cy0) * roi_in->width + (x + cx0)) * 4;
+      float *c = crop + ((size_t)y * cw + x) * 4;
+      for(int k = 0; k < 3; k++)
+        c[k] = powf(CLAMP(px[k] / white, 0.0f, 1.0f), gamma);
+      c[3] = 0.0f;
+    }
+
+  if(dt_inpaint_run(crop, 4, hole, cw, ch, crop) == 0)
+  {
+    for(int y = 0; y < ch; y++)
+      for(int x = 0; x < cw; x++)
+      {
+        const float f = hole[(size_t)y * cw + x] * opacity;
+        if(f <= 0.0f) continue;
+        float *d = in + ((size_t)(y + cy0) * roi_in->width + (x + cx0)) * 4;
+        const float *c = crop + ((size_t)y * cw + x) * 4;
+        for(int k = 0; k < 3; k++)
+          d[k] = d[k] * (1.0f - f) + powf(c[k], 2.2f) * white * f;
+      }
+  }
+  else
+    dt_control_log(_("AI remove needs its model: enable AI and install it in preferences > AI"));
+
+  dt_free_align(crop);
+  dt_free_align(hole);
+#else
+  dt_control_log(_("this build of darktable has no AI features"));
+#endif
+}
+
 static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int scale1)
 {
   int scale = scale1;
@@ -3793,7 +3936,8 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
         const dt_iop_retouch_algo_type_t algo = p->rt_forms[index].algorithm;
         float dx = 0.f, dy = 0.f, angle = 0.f;
 
-        if(algo != DT_IOP_RETOUCH_BLUR && algo != DT_IOP_RETOUCH_FILL)
+        if(algo != DT_IOP_RETOUCH_BLUR && algo != DT_IOP_RETOUCH_FILL
+           && algo != DT_IOP_RETOUCH_AI)
         {
           if(!rt_masks_get_transform_to_destination(self, piece, roi_layer, form, &dx, &dy, &angle,
                                                 p->rt_forms[index].distort_mode))
@@ -3830,7 +3974,8 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
         if((dx != 0
             || dy != 0
             || algo == DT_IOP_RETOUCH_BLUR
-            || algo == DT_IOP_RETOUCH_FILL)
+            || algo == DT_IOP_RETOUCH_FILL
+            || algo == DT_IOP_RETOUCH_AI)
            && ((roi_mask_scaled.width > 2)
                && (roi_mask_scaled.height > 2)))
         {
@@ -3874,6 +4019,10 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
 
             _retouch_fill(layer, roi_layer, mask_scaled,
                           &roi_mask_scaled, form_opacity, fill_color);
+          }
+          else if(algo == DT_IOP_RETOUCH_AI)
+          {
+            _retouch_ai(layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity);
           }
           else
             dt_print(DT_DEBUG_ALWAYS,
@@ -4723,6 +4872,12 @@ int process_cl(dt_iop_module_t *self,
   dt_iop_retouch_params_t *p = piece->data;
   dt_iop_retouch_global_data_t *gd = self->global_data;
   dt_iop_retouch_gui_data_t *g = self->gui_data;
+
+  // AI remove runs on the CPU: hand the whole module over to process()
+  for(int i = 0; i < RETOUCH_NO_FORMS; i++)
+    if(dt_is_valid_maskid(p->rt_forms[i].formid)
+       && p->rt_forms[i].algorithm == DT_IOP_RETOUCH_AI)
+      return DT_OPENCL_PROCESS_CL;
 
   cl_int err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
   const int devid = piece->pipe->devid;
