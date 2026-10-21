@@ -353,6 +353,7 @@ static void _basics_remove_widget(dt_lib_modulegroups_basic_item_t *item)
 
     if(GTK_IS_CONTAINER(item->old_parent) && gtk_widget_get_parent(item->widget) == item->box)
     {
+      if(DT_IS_BAUHAUS_WIDGET(item->widget)) dt_bauhaus_widget_set_compact(item->widget, FALSE);
       g_object_ref(item->widget);
       gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(item->widget)), item->widget);
 
@@ -616,6 +617,7 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
     if(DT_IS_BAUHAUS_WIDGET(w))
     {
       dt_bauhaus_widget_set_show_extended_label(item->widget, TRUE);
+      dt_bauhaus_widget_set_compact(item->widget, TRUE);
       item->module = dt_bauhaus_widget_get_module(item->widget);
     }
 

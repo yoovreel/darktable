@@ -195,6 +195,8 @@ void dt_bauhaus_widget_get_quad_rect(GtkWidget *widget,
                                      GdkRectangle *rect);
 const char* dt_bauhaus_widget_get_label(GtkWidget *widget);
 void dt_bauhaus_widget_hide_label(GtkWidget *widget);
+// single-row slider layout (label, track, value on one line)
+void dt_bauhaus_widget_set_compact(GtkWidget *widget, gboolean compact);
 void dt_bauhaus_widget_set_show_extended_label(GtkWidget *widget,
                                                gboolean show);
 // open the value-entry popup of a bauhaus widget, as if it were right-clicked.
