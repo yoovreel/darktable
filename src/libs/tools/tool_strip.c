@@ -296,6 +296,8 @@ static int _current_tool(void)
   {
     if(!strcmp(m->op, "crop")) return TOOL_CROP;
     if(!strcmp(m->op, "retouch")) return TOOL_REMOVE;
+    // the edit panel shows the basic sliders, whatever stays focused behind it
+    if(dt_dev_modulegroups_get(dev) == DT_MODULEGROUP_BASICS) return TOOL_EDIT;
     if(m->blend_params
        && (m->blend_params->mask_mode & (DEVELOP_MASK_MASK | DEVELOP_MASK_FLEXI)))
       return TOOL_MASKS;
