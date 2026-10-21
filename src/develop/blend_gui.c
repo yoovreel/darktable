@@ -1442,14 +1442,23 @@ static dt_iop_module_t *_masks_use_in_base(const char *op, const dt_iop_module_t
   return after ? after : first;
 }
 
-// the name the new instance carries: the mask's own module label, so the
-// modules sharing one mask read as one set in the panel and the history
+// the name of the mask's module, as the history shows it
+static gchar *_masks_use_in_src_name(dt_iop_module_t *src)
+{
+  if(src->multi_name_hand_edited && src->multi_name[0])
+    return dt_util_localize_segmented_name(src->multi_name, FALSE);
+  return dt_history_item_get_name(src);
+}
+
+// the name the new instance carries: a renamed mask module lends its name
+// (rename it "bride" and every module sharing its mask reads "bride"), else
+// "mask: <module>", so the modules sharing one mask read as one set
 static gchar *_masks_use_in_label(dt_iop_module_t *src)
 {
   if(src->multi_name_hand_edited && src->multi_name[0])
     return dt_util_localize_segmented_name(src->multi_name, FALSE);
   gchar *name = dt_history_item_get_name(src);
-  gchar *label = g_strdup_printf(_("mask of %s"), name);
+  gchar *label = g_strdup_printf(_("mask: %s"), name);
   g_free(name);
   return label;
 }
@@ -1480,11 +1489,13 @@ static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpo
   }
 
   gchar *label = _masks_use_in_label(src);
+  gchar *src_name = _masks_use_in_src_name(src);
   dt_iop_module_t *dst = dt_iop_gui_duplicate(base, FALSE);
   if(!dst || !dst->blend_data)
   {
     g_list_free(shapes);
     g_free(label);
+    g_free(src_name);
     return;
   }
   dt_iop_update_multi_name(dst, label, TRUE, TRUE, TRUE);
@@ -1495,8 +1506,8 @@ static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpo
   {
     // the whole mask, parametric channels and all, kept up to date
     _add_raster_mask(dst, src, BLEND_RASTER_ID);
-    dt_control_log(_("%s now uses the mask of %s"),
-                   dt_iop_get_localized_name(dst->op), label);
+    dt_control_log(_("%s now follows the mask of %s"),
+                   dt_iop_get_localized_name(dst->op), src_name);
   }
   else if(shapes && dbd->shapes_support)
   {
@@ -1505,18 +1516,18 @@ static void _masks_use_in_action(GSimpleAction *action, GVariant *parameter, gpo
     _masks_import_forms(dst, src, shapes, FALSE);
     dt_iop_request_focus(dst);
     if(has_raster)
-      dt_control_log(_("%s comes earlier in the pipe: the shapes and AI objects of %s are"
-                       " linked, without its parametric parts"),
-                     dt_iop_get_localized_name(dst->op), label);
+      dt_control_log(_("%s runs earlier, so it shares the shapes and AI objects of %s"),
+                     dt_iop_get_localized_name(dst->op), src_name);
     else
       dt_control_log(_("%s now shares the shapes of %s"),
-                     dt_iop_get_localized_name(dst->op), label);
+                     dt_iop_get_localized_name(dst->op), src_name);
   }
   else
     dt_control_log(_("%s can't read this mask"), dt_iop_get_localized_name(dst->op));
 
   g_list_free(shapes);
   g_free(label);
+  g_free(src_name);
 }
 
 static void _masks_use_in_btn_pressed(GtkGestureSingle *gesture,
