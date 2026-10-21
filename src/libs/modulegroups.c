@@ -479,6 +479,7 @@ static const char *_basics_section(const char *op)
     { "rgbcurve", N_("light") },             { "tonecurve", N_("light") },
     { "colorbalancergb", N_("presence") },   { "bilat", N_("presence") },
     { "hazeremoval", N_("presence") },       { "velvia", N_("presence") },
+    { "contrastntexture", N_("presence") },  { "localcontrast", N_("presence") },
     { "vibrance", N_("presence") },          { "colorequal", N_("color") },
     { "colorzones", N_("color") },           { "sharpen", N_("detail") },
     { "denoiseprofile", N_("detail") },      { "nlmeans", N_("detail") },
