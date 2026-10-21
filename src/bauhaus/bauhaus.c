@@ -1373,9 +1373,9 @@ static float _widget_width(const dt_bauhaus_widget_t *w)
                    - _widget_get_quad_width(w));
 }
 
-#define COMPACT_LABEL_W 88.0f
-#define COMPACT_VALUE_W 76.0f
-#define COMPACT_GAP 6.0f
+#define COMPACT_LABEL_W 78.0f
+#define COMPACT_VALUE_W 62.0f
+#define COMPACT_GAP 8.0f
 
 static gboolean _is_compact(const dt_bauhaus_widget_t *w)
 {
@@ -3084,6 +3084,11 @@ static gboolean _widget_draw(GtkWidget *widget,
       if(_is_compact(w))
       {
         const float x0 = _track_x0(w), tw = _track_w(w);
+        // a thicker track and a bigger marker, easier to see and to grab
+        dt_bauhaus_t *bhc = darktable.bauhaus;
+        const float old_base = bhc->baseline_size, old_mark = bhc->marker_size;
+        bhc->baseline_size = old_base * 1.6f;
+        bhc->marker_size = old_mark * 1.5f;
         cairo_save(cr);
         cairo_translate(cr, x0, 0);
         _draw_baseline(w, cr, tw, h3);
@@ -3096,6 +3101,8 @@ static gboolean _widget_draw(GtkWidget *widget,
           cairo_restore(cr);
         }
         cairo_restore(cr);
+        bhc->baseline_size = old_base;
+        bhc->marker_size = old_mark;
 
         set_color(cr, *text_color);
         gchar *label_full = _build_label(w);
@@ -3298,7 +3305,7 @@ static void _widget_get_preferred_height(GtkWidget *widget,
   if(_is_compact(w))
   {
     // one row: the line height is all it needs
-    *minimum_height += 2 * INNER_PADDING;
+    *minimum_height += 2 * INNER_PADDING + 8;
   }
   else if(w->type == DT_BAUHAUS_SLIDER)
   {
