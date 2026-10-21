@@ -90,8 +90,8 @@ gboolean expandable(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  // under the histogram (1000), above the module groups (998)
-  return 999;
+  // above the histogram (1000), as in other editors' develop panel
+  return 1001;
 }
 
 /* ---- icons ---------------------------------------------------------------- */
@@ -205,6 +205,7 @@ static gboolean _open_module(const char *op)
   dt_dev_modulegroups_switch(darktable.develop, m);
   dt_iop_request_focus(m);
   dt_iop_gui_set_expanded(m, TRUE, TRUE);
+  dt_iop_gui_scroll_into_view_later(m->expander);
   return TRUE;
 }
 

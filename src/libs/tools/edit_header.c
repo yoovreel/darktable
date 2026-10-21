@@ -28,7 +28,9 @@
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
+#include "develop/blend.h"
 #include "develop/develop.h"
+#include "develop/imageop.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
@@ -41,6 +43,9 @@ typedef struct dt_lib_edit_header_t
 {
   GtkWidget *roll;
   GtkWidget *file;
+  GtkWidget *overlay;       // "● mask 1 · overlay on", while a mask is shown
+  GtkWidget *overlay_label;
+  guint poll;
 } dt_lib_edit_header_t;
 
 const char *name(dt_lib_module_t *self)
@@ -93,6 +98,44 @@ static void _update(dt_lib_module_t *self)
 static void _image_changed(gpointer instance, dt_lib_module_t *self)
 {
   _update(self);
+}
+
+static gboolean _mask_shown(const dt_iop_module_t *m)
+{
+  return m && (m->request_mask_display
+               & (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL));
+}
+
+static void _toggle_overlay(dt_action_t *action)
+{
+  dt_iop_module_t *m = dt_dev_gui_module();
+  if(!m || !m->blend_data || !m->blend_params
+     || m->blend_params->mask_mode == DEVELOP_MASK_DISABLED)
+  {
+    dt_control_log(_("no mask to show: pick a masked adjustment first"));
+    return;
+  }
+  dt_iop_gui_blend_mask_display(m, !_mask_shown(m));
+}
+
+static gboolean _poll(gpointer user_data)
+{
+  dt_lib_module_t *self = user_data;
+  dt_lib_edit_header_t *d = self->data;
+  if(!gtk_widget_get_mapped(self->widget)) return G_SOURCE_CONTINUE;
+  const dt_iop_module_t *m = dt_dev_gui_module();
+  const gboolean on = _mask_shown(m);
+  if(on)
+  {
+    const gboolean named = m->multi_name[0] && strcmp(m->multi_name, "0");
+    gchar *t = g_strdup_printf(_("%s · overlay  (alt+o)"),
+                               named ? m->multi_name : m->name());
+    if(g_strcmp0(gtk_label_get_text(GTK_LABEL(d->overlay_label)), t))
+      gtk_label_set_text(GTK_LABEL(d->overlay_label), t);
+    g_free(t);
+  }
+  if(gtk_widget_get_visible(d->overlay) != on) gtk_widget_set_visible(d->overlay, on);
+  return G_SOURCE_CONTINUE;
 }
 
 static void _before_after_clicked(GtkButton *button, dt_lib_module_t *self)
@@ -155,8 +198,23 @@ void gui_init(dt_lib_module_t *self)
                                     "drag the line on the image to move the split"));
   g_signal_connect(ba, "clicked", G_CALLBACK(_before_after_clicked), self);
 
+  // the mask overlay notice, next to the photo's name
+  GtkWidget *dotw = gtk_label_new("●");
+  dt_gui_add_class(dotw, "dt_edit_header_overlay_dot");
+  d->overlay_label = gtk_label_new("");
+  // it must never widen the window: the bar gives way, the label shortens
+  gtk_label_set_ellipsize(GTK_LABEL(d->overlay_label), PANGO_ELLIPSIZE_END);
+  gtk_label_set_width_chars(GTK_LABEL(d->overlay_label), 6);
+  d->overlay = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  dt_gui_add_class(d->overlay, "dt_edit_header_overlay");
+  gtk_box_pack_start(GTK_BOX(d->overlay), dotw, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(d->overlay), d->overlay_label, FALSE, FALSE, 0);
+  gtk_widget_show_all(d->overlay);
+  gtk_widget_set_no_show_all(d->overlay, TRUE);
+
   gtk_box_pack_end(GTK_BOX(self->widget), export, FALSE, FALSE, 0);
   gtk_box_pack_end(GTK_BOX(self->widget), ba, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->overlay, FALSE, FALSE, 12);
   gtk_widget_set_hexpand(self->widget, TRUE);
   gtk_widget_show_all(self->widget);
 
@@ -169,6 +227,10 @@ void gui_init(dt_lib_module_t *self)
     g_free(key);
   }
 
+  dt_action_register(DT_ACTION(self), N_("toggle mask overlay"), _toggle_overlay,
+                     GDK_KEY_o, GDK_MOD1_MASK);
+  d->poll = g_timeout_add(300, _poll, self);
+
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _image_changed);
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_INITIALIZE, _image_changed);
   _update(self);
@@ -176,6 +238,8 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  dt_lib_edit_header_t *d = self->data;
+  if(d && d->poll) g_source_remove(d->poll);
   g_free(self->data);
   self->data = NULL;
 }

@@ -457,16 +457,99 @@ scrollbar slider
 
 .dt_mask_layers_new
 {
-  margin: 0.42em 0.28em 0.14em 0.28em;
-  border: 1px dashed @m_line2;
-  background-color: transparent;
-  color: @m_text2;
+  margin: 0.28em 0.28em 0.42em 0.28em;
+  border: 0;
+  border-radius: 6px;
+  background-color: @m_accent;
+  color: @m_on_accent;
+  font-weight: 600;
+}
+
+.dt_mask_layers_new label
+{
+  color: @m_on_accent;
 }
 
 .dt_mask_layers_new:hover
 {
+  background-color: shade(@m_accent, 1.12);
+}
+
+#mask-layers .dt_mask_layer_card
+{
+  border-radius: 8px;
+  padding: 0.14em 0.28em;
+  margin: 0.07em 0;
+}
+
+#mask-layers .dt_mask_layer_card.dt_mask_layer_card_active
+{
+  background-color: @m_raised;
+  border: 1px solid @m_line2;
+}
+
+#mask-layers .dt_mask_layer_swatch
+{
+  min-width: 18px;
+  min-height: 18px;
+  border-radius: 5px;
+  background-color: alpha(#E0457B, 0.55);
+  margin: 0 0.28em;
+}
+
+#mask-layers .dt_mask_parts
+{
+  margin: 0.14em 0.28em 0.42em 2.2em;
+  color: @m_text2;
+}
+
+#mask-layers .dt_mask_part_plus,
+#mask-layers .dt_mask_part_minus
+{
+  font-size: 0.8em;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 0 0.35em;
+}
+
+#mask-layers .dt_mask_part_plus
+{
+  color: #7FD18B;
+  background-color: alpha(#7FD18B, 0.12);
+}
+
+#mask-layers .dt_mask_part_minus
+{
+  color: #FF8A8A;
+  background-color: alpha(#FF8A8A, 0.12);
+}
+
+#mask-layers .dt_mask_mode,
+#mask-layers .dt_mask_part_btn
+{
+  border: 1px solid @m_line2;
+  border-radius: 6px;
+  background-color: transparent;
+  color: @m_text2;
+  padding: 0.14em 0.56em;
+}
+
+#mask-layers .dt_mask_part_btn
+{
+  background-color: @m_raised;
+}
+
+#mask-layers .dt_mask_mode.dt_mask_mode_active
+{
   border-color: @m_accent;
   color: @m_accent;
+}
+
+#mask-layers .dt_mask_mode:hover,
+#mask-layers .dt_mask_part_btn:hover
+{
+  background-color: @m_active;
+  color: @m_text;
 }
 
 #edit-header .dt_edit_header_ba
@@ -475,4 +558,122 @@ scrollbar slider
   border: 1px solid @m_line2;
   border-radius: 8px;
   padding: 0.14em 0.56em;
+}
+
+/* ---- left panel tabs: presets | history | snapshots ----------------------- */
+#left-tabs
+{
+  margin: 0.42em 0.5em 0.28em 0.5em;
+}
+
+#left-tabs .dt_tab
+{
+  border: 0;
+  border-radius: 8px;
+  background-color: transparent;
+  color: @m_muted;
+  padding: 0.35em 0;
+}
+
+#left-tabs .dt_tab:hover
+{
+  color: @m_text;
+}
+
+#left-tabs .dt_tab.dt_tab_active
+{
+  background-color: @m_active;
+  color: @m_text;
+  font-weight: 500;
+}
+
+/* ---- zoom pill in the bottom bar ----------------------------------------- */
+#zoom-pill
+{
+  background-color: alpha(#1E1E20, 0.92);
+  border: 1px solid @m_line2;
+  border-radius: 999px;
+  padding: 2px;
+  margin-right: 0.56em;
+}
+
+#zoom-pill button
+{
+  border: 0;
+  border-radius: 999px;
+  background-color: transparent;
+  color: @m_muted;
+  padding: 0.07em 0.7em;
+}
+
+#zoom-pill button:hover
+{
+  background-color: @m_active;
+  color: @m_text;
+}
+
+/* ---- mask overlay notice in the edit header ------------------------------ */
+#edit-header .dt_edit_header_overlay
+{
+  background-color: alpha(#1E1E20, 0.92);
+  border: 1px solid @m_line2;
+  border-radius: 999px;
+  padding: 0.07em 0.7em;
+  color: @m_text2;
+}
+
+#edit-header .dt_edit_header_overlay_dot
+{
+  color: #E0457B;
+}
+
+/* ---- "adjust · mask" header ----------------------------------------------- */
+.dt_masks_adjust_title
+{
+  color: @m_text;
+  font-weight: 600;
+  margin: 0.56em 0 0.21em 0;
+}
+
+.dt_masks_adjust_reset
+{
+  border: 1px solid @m_line2;
+  border-radius: 6px;
+  background-color: transparent;
+  color: @m_muted;
+  padding: 0 0.56em;
+  margin: 0.42em 0 0.14em 0;
+}
+
+/* ---- panel rows under the basic panel ------------------------------------ */
+#basics-panel-rows
+{
+  margin-top: 0.56em;
+}
+
+#basics-panel-rows .dt_panel_row
+{
+  border: 1px solid @m_line;
+  border-radius: 10px;
+  background-color: @m_card;
+  color: @m_text;
+  font-weight: 500;
+  padding: 0.56em 0.84em;
+  margin: 0.14em 0;
+}
+
+#basics-panel-rows .dt_panel_row:hover
+{
+  background-color: @m_raised;
+}
+
+#basics-panel-rows .dt_panel_row_chevron
+{
+  color: @m_faint;
+  font-size: 1.3em;
+}
+
+#presets-list .dt_presets_row
+{
+  padding: 0.21em 0.42em;
 }

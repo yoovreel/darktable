@@ -44,6 +44,7 @@ typedef struct dt_lib_mask_layers_t
   guint refresh;
   guint poll;
   gchar *signature;
+  gboolean subtract; // the parts drawn next are subtracted
 } dt_lib_mask_layers_t;
 
 const char *name(dt_lib_module_t *self)
@@ -69,8 +70,8 @@ uint32_t container(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  // under the presets (1100)
-  return 1050;
+  // under the presets / history / snapshots tabs (1100, 900, 1000)
+  return 880;
 }
 
 static gboolean _has_mask(const dt_iop_module_t *m)
@@ -89,6 +90,7 @@ static void _row_clicked(GtkButton *button, dt_lib_module_t *self)
   dt_iop_request_focus(m);
   dt_iop_gui_set_expanded(m, TRUE, TRUE);
   dt_iop_gui_blend_masks_panel_open();
+  dt_iop_gui_scroll_into_view_later(m->expander);
 }
 
 static void _switch_toggled(GtkToggleButton *button, dt_lib_module_t *self)
@@ -109,6 +111,110 @@ static void _new_clicked(GtkButton *button, dt_lib_module_t *self)
     dt_control_log(_("could not start a new mask"));
 }
 
+// what the open mask is made of, and the buttons that change it
+static const struct { const char *label; int shape; } _part_buttons[] = {
+  { N_("brush"), 1 },  { N_("linear"), 4 }, { N_("radial"), 2 },
+  { N_("ellipse"), 3 }, { N_("path"), 0 },
+#ifdef HAVE_AI
+  { N_("AI object"), 5 },
+#endif
+};
+
+static void _part_clicked(GtkButton *button, dt_lib_module_t *self)
+{
+  dt_lib_mask_layers_t *d = self->data;
+  dt_iop_module_t *m = g_object_get_data(G_OBJECT(button), "module");
+  if(!m || !g_list_find(darktable.develop->iop, m)) return;
+  const int shape = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "shape"));
+  if(dt_iop_gui_blend_mask_add_part(m, shape, d->subtract))
+    dt_control_log(d->subtract ? _("draw what to take out of the mask")
+                               : _("draw what to add to the mask"));
+}
+
+static void _mode_clicked(GtkButton *button, dt_lib_module_t *self)
+{
+  dt_lib_mask_layers_t *d = self->data;
+  d->subtract = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "subtract"));
+  g_free(d->signature);
+  d->signature = NULL; // rebuild, to show the mode
+}
+
+static void _invert_clicked(GtkButton *button, dt_lib_module_t *self)
+{
+  dt_iop_module_t *m = g_object_get_data(G_OBJECT(button), "module");
+  if(m && g_list_find(darktable.develop->iop, m)) dt_iop_gui_blend_mask_invert(m);
+}
+
+static GtkWidget *_parts_box(dt_lib_module_t *self, dt_iop_module_t *m)
+{
+  dt_lib_mask_layers_t *d = self->data;
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+  dt_gui_add_class(box, "dt_mask_parts");
+
+  GList *parts = dt_iop_gui_blend_mask_parts(m);
+  for(const GList *l = parts; l; l = g_list_next(l))
+  {
+    const char *p = l->data;
+    const gboolean minus = g_str_has_prefix(p, "−");
+    const char *name = p + (minus ? strlen("−") : 1);
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *op = gtk_label_new(minus ? _("subtract") : _("add"));
+    dt_gui_add_class(op, minus ? "dt_mask_part_minus" : "dt_mask_part_plus");
+    GtkWidget *nm = gtk_label_new(name);
+    gtk_label_set_xalign(GTK_LABEL(nm), 0.0);
+    gtk_label_set_ellipsize(GTK_LABEL(nm), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(GTK_BOX(row), op, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), nm, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
+  }
+  if(!parts)
+  {
+    GtkWidget *e = gtk_label_new(_("empty: add a part below"));
+    gtk_label_set_xalign(GTK_LABEL(e), 0.0);
+    dt_gui_add_class(e, "dt_presets_empty");
+    gtk_box_pack_start(GTK_BOX(box), e, FALSE, FALSE, 0);
+  }
+  g_list_free_full(parts, g_free);
+
+  // add | subtract | invert
+  GtkWidget *modes = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  for(int i = 0; i < 2; i++)
+  {
+    GtkWidget *b = gtk_button_new_with_label(i ? _("subtract") : _("add"));
+    dt_gui_add_class(b, "dt_mask_mode");
+    if(d->subtract == i) dt_gui_add_class(b, "dt_mask_mode_active");
+    gtk_widget_set_tooltip_text(b, i ? _("the next part drawn is taken out of the mask")
+                                     : _("the next part drawn is added to the mask"));
+    g_object_set_data(G_OBJECT(b), "subtract", GINT_TO_POINTER(i));
+    g_signal_connect(b, "clicked", G_CALLBACK(_mode_clicked), self);
+    gtk_box_pack_start(GTK_BOX(modes), b, FALSE, FALSE, 0);
+  }
+  GtkWidget *inv = gtk_button_new_with_label(_("invert"));
+  dt_gui_add_class(inv, "dt_mask_mode");
+  gtk_widget_set_tooltip_text(inv, _("swap what the mask selects and what it leaves out"));
+  g_object_set_data(G_OBJECT(inv), "module", m);
+  g_signal_connect(inv, "clicked", G_CALLBACK(_invert_clicked), self);
+  gtk_box_pack_start(GTK_BOX(modes), inv, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), modes, FALSE, FALSE, 4);
+
+  // the parts to draw
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 4);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 4);
+  for(int i = 0; i < (int)G_N_ELEMENTS(_part_buttons); i++)
+  {
+    GtkWidget *b = gtk_button_new_with_label(_(_part_buttons[i].label));
+    dt_gui_add_class(b, "dt_mask_part_btn");
+    g_object_set_data(G_OBJECT(b), "module", m);
+    g_object_set_data(G_OBJECT(b), "shape", GINT_TO_POINTER(_part_buttons[i].shape));
+    g_signal_connect(b, "clicked", G_CALLBACK(_part_clicked), self);
+    gtk_grid_attach(GTK_GRID(grid), b, i % 3, i / 3, 1, 1);
+  }
+  gtk_box_pack_start(GTK_BOX(box), grid, FALSE, FALSE, 0);
+  return box;
+}
+
 static void _fill(dt_lib_module_t *self)
 {
   dt_lib_mask_layers_t *d = self->data;
@@ -125,9 +231,9 @@ static void _fill(dt_lib_module_t *self)
     GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     dt_gui_add_class(row, "dt_mask_layer");
 
-    GtkWidget *sw = dtgtk_togglebutton_new(dtgtk_cairo_paint_switch, 0, NULL);
+    GtkWidget *sw = dtgtk_togglebutton_new(dtgtk_cairo_paint_eye, 0, NULL);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sw), m->enabled);
-    gtk_widget_set_tooltip_text(sw, _("turn this adjustment on or off"));
+    gtk_widget_set_tooltip_text(sw, _("show or hide this adjustment"));
     g_object_set_data(G_OBJECT(sw), "module", m);
     g_signal_connect(sw, "toggled", G_CALLBACK(_switch_toggled), self);
     dt_gui_add_class(sw, "dt_transparent_background");
@@ -149,9 +255,23 @@ static void _fill(dt_lib_module_t *self)
     g_signal_connect(btn, "clicked", G_CALLBACK(_row_clicked), self);
     if(m == dt_dev_gui_module()) dt_gui_add_class(row, "dt_mask_layer_active");
 
-    gtk_box_pack_start(GTK_BOX(row), sw, FALSE, FALSE, 0);
+    // a swatch for the mask, in the overlay's color
+    GtkWidget *swatch = gtk_label_new(NULL);
+    dt_gui_add_class(swatch, "dt_mask_layer_swatch");
+    gtk_widget_set_valign(swatch, GTK_ALIGN_CENTER);
+
+    gtk_box_pack_start(GTK_BOX(row), swatch, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), btn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(d->list), row, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(row), sw, FALSE, FALSE, 0);
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    dt_gui_add_class(card, "dt_mask_layer_card");
+    gtk_box_pack_start(GTK_BOX(card), row, FALSE, FALSE, 0);
+    if(m == dt_dev_gui_module())
+    {
+      dt_gui_add_class(card, "dt_mask_layer_card_active");
+      gtk_box_pack_start(GTK_BOX(card), _parts_box(self, m), FALSE, FALSE, 0);
+    }
+    gtk_box_pack_start(GTK_BOX(d->list), card, FALSE, FALSE, 0);
     n++;
   }
 
@@ -171,6 +291,13 @@ static gchar *_signature(void)
     if(!m->expander || !_has_mask(m)) continue;
     g_string_append_printf(sig, "%p:%d:%s:%d|", (void *)m, m->enabled, m->multi_name,
                            m == dt_dev_gui_module());
+    if(m == dt_dev_gui_module())
+    {
+      GList *parts = dt_iop_gui_blend_mask_parts((dt_iop_module_t *)m);
+      for(const GList *p = parts; p; p = g_list_next(p))
+        g_string_append_printf(sig, "%s;", (const char *)p->data);
+      g_list_free_full(parts, g_free);
+    }
   }
   return g_string_free(sig, FALSE);
 }
@@ -226,9 +353,9 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(add, "clicked", G_CALLBACK(_new_clicked), self);
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), add, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->list, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->empty, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), add, FALSE, FALSE, 0);
 
   if(!dt_conf_key_exists("plugins/darkroom/mask_layers/expanded"))
     dt_conf_set_bool("plugins/darkroom/mask_layers/expanded", TRUE);

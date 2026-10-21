@@ -108,8 +108,8 @@ static void _channel_display_monochrome(const float *const restrict in,
                                         const size_t buffsize,
                                         const float alpha)
 {
-  // yellow; "unused" element enables vectorization
-  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f };
+  // pink (#E0457B), as other editors show a mask; "unused" element enables vectorization
+  const dt_aligned_pixel_t mask_color = { 0.878f, 0.271f, 0.482f };
 
   DT_OMP_FOR_SIMD(aligned(in, out: 64) aligned(mask_color: 16))
   for(size_t j = 0; j < buffsize; j += 4)
@@ -126,8 +126,8 @@ static void _channel_display_false_color(const float *const restrict in,
                                          const float alpha,
                                          dt_dev_pixelpipe_display_mask_t channel)
 {
-  // yellow, "unused" element aids vectorization
-  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f };
+  // pink (#E0457B), "unused" element aids vectorization
+  const dt_aligned_pixel_t mask_color = { 0.878f, 0.271f, 0.482f };
 
   switch(channel & DT_DEV_PIXELPIPE_DISPLAY_ANY & ~DT_DEV_PIXELPIPE_DISPLAY_OUTPUT)
   {
@@ -249,8 +249,8 @@ static void _mask_display(const float *const restrict in,
                           const size_t buffsize,
                           const float alpha)
 {
-  // yellow, "unused" element aids vectorization
-  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f };
+  // pink (#E0457B), "unused" element aids vectorization
+  const dt_aligned_pixel_t mask_color = { 0.878f, 0.271f, 0.482f };
   const float mix = CLIP(dt_conf_get_float("darkroom/ui/develop_mask_mix"));
   DT_OMP_FOR_SIMD(aligned(in, out: 64) aligned(mask_color: 16))
   for(size_t j = 0; j < buffsize; j+= 4)

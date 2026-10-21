@@ -1673,6 +1673,15 @@ static void _masks_adjust_refresh(dt_iop_module_t *src)
 {
   dt_iop_gui_blend_data_t *bd = src->blend_data;
   if(!bd || !bd->masks_adjust_box) return;
+  if(bd->masks_adjust_title)
+  {
+    // "adjust · <the mask's name>"
+    gchar *name = _masks_use_in_label(src);
+    gchar *t = g_strdup_printf("%s · %s", _("adjust"), name);
+    gtk_label_set_text(GTK_LABEL(bd->masks_adjust_title), t);
+    g_free(t);
+    g_free(name);
+  }
   ++darktable.gui->reset;
   for(int i = 0; i < _N_ADJUSTS; i++)
   {
@@ -1706,16 +1715,39 @@ static void _masks_adjust_refresh(dt_iop_module_t *src)
   --darktable.gui->reset;
 }
 
+static void _masks_adjust_reset(GtkButton *button, dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd) return;
+  // each slider back to 0 goes through _masks_adjust_changed, which leaves
+  // alone the instances not created yet
+  for(int i = 0; i < _N_ADJUSTS; i++)
+    if(bd->masks_adjust_sliders[i] && dt_bauhaus_slider_get(bd->masks_adjust_sliders[i]) != 0.0f)
+      dt_bauhaus_slider_set(bd->masks_adjust_sliders[i], 0.0f);
+}
+
 static GtkWidget *_masks_adjust_box_new(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = module->blend_data;
   GtkWidget *box = dt_gui_vbox();
   dt_gui_add_class(box, "dt_masks_adjust");
-  GtkWidget *label = dt_ui_section_label_new(C_("section", "adjust this mask"));
+  GtkWidget *label = gtk_label_new(_("adjust"));
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+  dt_gui_add_class(label, "dt_masks_adjust_title");
   gtk_widget_set_tooltip_text(label,
                               _("Lightroom-style sliders for this mask. Moving one adds a module\n"
                                 "instance that follows this mask (named after it) and sets it"));
-  dt_gui_box_add(box, label);
+  bd->masks_adjust_title = label;
+  GtkWidget *reset = gtk_button_new_with_label(_("reset"));
+  dt_gui_add_class(reset, "dt_masks_adjust_reset");
+  gtk_widget_set_tooltip_text(reset, _("put every slider of this mask back to 0"));
+  g_signal_connect(reset, "clicked", G_CALLBACK(_masks_adjust_reset), module);
+  GtkWidget *head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(head), label, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(head), reset, FALSE, FALSE, 0);
+  gtk_widget_show_all(head);
+  dt_gui_box_add(box, head);
   for(int i = 0; i < _N_ADJUSTS; i++)
   {
     const _masks_adjust_t *a = &_masks_adjusts[i];
@@ -1738,6 +1770,136 @@ static GtkWidget *_masks_adjust_box_new(dt_iop_module_t *module)
   gtk_widget_show(box);
   bd->masks_adjust_box = box;
   return box;
+}
+
+// ---- Lightroom-style add / subtract / invert, for the masks list -----------
+// Lightroom builds a mask from parts added to it and parts subtracted from it.
+// Here that is the whole mask composed by "difference": what it held moves into
+// a group at its bottom, the part added to, and a new group on top holds what
+// is subtracted (see _compose). Until something is subtracted the mask is left
+// as it is, one group adding its parts.
+
+static void _compose(dt_iop_module_t *module,
+                     const dt_masks_point_group_t *pt,
+                     const dt_masks_state_t flexi_op);
+static void _group_toggle_output_invert(dt_iop_module_t *module, const dt_mask_id_t cid);
+
+static const char *_mask_part_actions[] = {
+  "iop/blend/shapes/add path",   "iop/blend/shapes/add brush",
+  "iop/blend/shapes/add circle", "iop/blend/shapes/add ellipse",
+  "iop/blend/shapes/add gradient",
+#ifdef HAVE_AI
+  "iop/blend/shapes/add AI object",
+#endif
+};
+
+// the marker cid of the group a nested reference points to
+static dt_mask_id_t _nested_cid(const dt_masks_point_group_t *ref)
+{
+  dt_masks_form_t *sub = ref ? dt_masks_get_from_id(darktable.develop, ref->formid) : NULL;
+  if(!sub || !(sub->type & DT_MASKS_GROUP) || !sub->points) return INVALID_MASKID;
+  const dt_masks_point_group_t *mk = sub->points->data;
+  return dt_masks_point_is_marker(mk) ? mk->formid : INVALID_MASKID;
+}
+
+static gboolean _mask_is_add_subtract(const dt_masks_form_t *grp)
+{
+  if(!grp || !grp->points || !grp->points->next) return FALSE;
+  const dt_masks_point_group_t *root = grp->points->data;
+  return dt_masks_point_is_marker(root) && (root->state & DT_MASKS_STATE_FLEXI_DIFFERENCE)
+         && dt_is_valid_maskid(_nested_cid(grp->points->next->data));
+}
+
+gboolean dt_iop_gui_blend_mask_add_part(dt_iop_module_t *module, const int shape,
+                                        const gboolean subtract)
+{
+  dt_iop_gui_blend_data_t *bd = module ? module->blend_data : NULL;
+  if(!bd || !bd->shapes_support || shape < 0 || shape >= (int)G_N_ELEMENTS(_mask_part_actions))
+    return FALSE;
+  dt_iop_request_focus(module);
+  _blendop_mask_enable(module);
+
+  dt_mask_id_t rootcid = INVALID_MASKID;
+  dt_masks_form_t *grp = dt_masks_gui_module_flexi_group(module, &rootcid);
+  if(!grp) return FALSE;
+
+  dt_mask_id_t target = INVALID_MASKID;
+  if(subtract)
+  {
+    if(!_mask_has_elements(grp))
+    {
+      dt_control_log(_("add something to the mask first, then subtract from it"));
+      return FALSE;
+    }
+    if(!_mask_is_add_subtract(grp))
+    {
+      _compose(module, grp->points->data, DT_MASKS_STATE_FLEXI_DIFFERENCE);
+      grp = dt_masks_gui_module_mask_group(module);
+    }
+    // the group on top, the last one of the mask's list
+    target = _mask_is_add_subtract(grp) ? _nested_cid(g_list_last(grp->points)->data)
+                                        : INVALID_MASKID;
+    if(!dt_is_valid_maskid(target)) return FALSE;
+  }
+  else if(_mask_is_add_subtract(grp))
+    target = _nested_cid(grp->points->next->data);
+
+  bd->panel_selected_formid = INVALID_MASKID;
+  bd->panel_selected_group_cid = target;
+  _flexi_refine_follow_selection(bd);
+  dt_action_process(_mask_part_actions[shape], 0, NULL, "on", 1.0f);
+  return TRUE;
+}
+
+void dt_iop_gui_blend_mask_invert(dt_iop_module_t *module)
+{
+  dt_mask_id_t rootcid = INVALID_MASKID;
+  dt_masks_form_t *grp = module ? dt_masks_gui_module_flexi_group(module, &rootcid) : NULL;
+  if(!grp || !_mask_has_elements(grp))
+  {
+    dt_control_log(_("the mask is empty: nothing to invert yet"));
+    return;
+  }
+  _group_toggle_output_invert(module, rootcid);
+}
+
+static void _mask_parts_collect(const dt_masks_form_t *g, const gboolean minus, GList **out)
+{
+  for(const GList *l = g ? g->points : NULL; l; l = g_list_next(l))
+  {
+    const dt_masks_point_group_t *pt = l->data;
+    if(dt_masks_point_is_marker(pt)) continue;
+    const dt_masks_form_t *f = dt_masks_get_from_id(darktable.develop, pt->formid);
+    if(!f) continue;
+    if(f->type & DT_MASKS_GROUP)
+      _mask_parts_collect(f, minus, out);
+    else
+      *out = g_list_append(*out, g_strdup_printf("%s%s", minus ? "−" : "+", f->name));
+  }
+}
+
+GList *dt_iop_gui_blend_mask_parts(dt_iop_module_t *module)
+{
+  dt_masks_form_t *grp = module ? dt_masks_gui_module_mask_group(module) : NULL;
+  if(!grp) return NULL;
+  GList *out = NULL;
+  if(_mask_is_add_subtract(grp))
+  {
+    for(const GList *l = grp->points->next; l; l = g_list_next(l))
+    {
+      const dt_masks_point_group_t *pt = l->data;
+      const dt_masks_form_t *f = dt_masks_get_from_id(darktable.develop, pt->formid);
+      if(!f) continue;
+      const gboolean minus = l != grp->points->next;
+      if(f->type & DT_MASKS_GROUP)
+        _mask_parts_collect(f, minus, &out);
+      else
+        out = g_list_append(out, g_strdup_printf("%s%s", minus ? "−" : "+", f->name));
+    }
+  }
+  else
+    _mask_parts_collect(grp, FALSE, &out);
+  return out;
 }
 
 // the tool strip's "masks" button: Lightroom starts a mask with its own set

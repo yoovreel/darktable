@@ -453,6 +453,11 @@ static void _scroll_into_view_later(GtkWidget *widget)
                   g_object_ref(widget), g_object_unref);
 }
 
+void dt_iop_gui_scroll_into_view_later(GtkWidget *widget)
+{
+  if(widget) _scroll_into_view_later(widget);
+}
+
 void dt_masks_gui_flexi_inline_collapse_clicked(GtkWidget *w, gpointer user_data)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;

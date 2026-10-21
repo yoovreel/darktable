@@ -75,11 +75,11 @@ uint32_t container(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  // first in its container: view.c packs the highest position at the top,
-  // past snapshots (1000), history (900), the duplicate manager (850) and the
+  // under the masks list (880), past the presets / history / snapshots tabs
+  // (1200 and 1100, 900, 1000) and above the duplicate manager (850) and the
   // color picker (800). A position the user gives it by dragging is stored
   // and wins over this one (_lib_position in libs/lib.c)
-  return 1100;
+  return 870;
 }
 
 // show self->expander only in the "utility" position, by gtk_widget_show and

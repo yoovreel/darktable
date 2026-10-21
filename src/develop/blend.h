@@ -424,6 +424,7 @@ typedef struct dt_iop_gui_blend_data_t
   // this mask (_masks_adjust_box_new in blend_gui.c)
   GtkWidget *masks_adjust_box;
   GtkWidget *masks_adjust_sliders[13];
+  GtkWidget *masks_adjust_title;
   GtkWidget *masks_shapes[DEVELOP_MASKS_NB_SHAPES];
   int masks_type[DEVELOP_MASKS_NB_SHAPES];
   GtkWidget *masks_edit;
@@ -982,11 +983,22 @@ void dt_iop_gui_blend_masks_panel_toggle(void);
 // start a new local adjustment: a "mask N" exposure instance with a drawn mask
 // and its panel open. Returns the new instance, or NULL
 struct dt_iop_module_t *dt_iop_gui_blend_new_mask_adjustment(void);
+// Lightroom-style mask building: start drawing a part of the mask. `shape`:
+// 0 path, 1 brush, 2 circle, 3 ellipse, 4 gradient, 5 AI object. With
+// `subtract`, what is drawn is taken out of the mask
+gboolean dt_iop_gui_blend_mask_add_part(struct dt_iop_module_t *module, const int shape,
+                                        const gboolean subtract);
+// invert the whole mask
+void dt_iop_gui_blend_mask_invert(struct dt_iop_module_t *module);
+// the mask's parts, as "+name" or "−name" strings to g_free (g_list_free_full)
+GList *dt_iop_gui_blend_mask_parts(struct dt_iop_module_t *module);
 // open the focused module's mask panel where it is hosted, if it is folded
 void dt_iop_gui_blend_masks_panel_show(void);
 // open the focused module's mask panel, wherever it is hosted, going by what is
 // on screen rather than the stored fold state
 void dt_iop_gui_blend_masks_panel_open(void);
+// scroll the panel holding `widget` so that it is in view, once laid out
+void dt_iop_gui_scroll_into_view_later(GtkWidget *widget);
 // the canvas panel changed sides: lay its header out for the new one
 void dt_iop_gui_blend_masks_panel_side_changed(void);
 // the tooltip of both buttons that display the mask: the overlay in the mask
