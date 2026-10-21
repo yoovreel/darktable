@@ -362,3 +362,34 @@ scrollbar slider
   padding: 0.42em 0.56em;
   margin: 0.42em 0;
 }
+
+/* ---- presets list (left panel) ------------------------------------------- */
+#presets-list .dt_presets_group
+{
+  color: @m_faint;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 0.7em 0.42em 0.21em 0.42em;
+}
+
+#presets-list .dt_presets_row
+{
+  border: 0;
+  border-radius: 7px;
+  padding: 0.28em 0.56em;
+  background-color: transparent;
+  color: @m_text2;
+}
+
+#presets-list .dt_presets_row:hover
+{
+  background-color: @m_raised;
+  color: @m_text;
+}
+
+.dt_presets_empty
+{
+  color: @m_faint;
+  margin: 0.56em;
+}
