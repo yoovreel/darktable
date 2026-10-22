@@ -35,6 +35,20 @@ static dt_ai_environment_t *_env = NULL;
 static dt_ai_context_t *_ctx = NULL;
 static gboolean _load_failed = FALSE;
 
+// the last results, by their exact input: a pipe run again on unchanged
+// pixels (a change further down the pipe, the cache evicting the module's
+// output, going back and forth in the history) gets the result without a
+// second inference, which is most of the time a stroke takes. Each entry is
+// one 3x512x512 float result, 3 MiB. Guarded by _lock
+#define INPAINT_CACHE_N 8
+typedef struct _inpaint_cached_t
+{
+  dt_hash_t key;
+  float *res;
+} _inpaint_cached_t;
+static _inpaint_cached_t _cache[INPAINT_CACHE_N];
+static int _cache_next = 0;
+
 static char *_model_id(void)
 {
   char *id = dt_ai_models_get_active_for_task(DT_INPAINT_TASK);
@@ -180,10 +194,32 @@ int dt_inpaint_run(const float *rgb,
     { .data = res, .type = DT_AI_FLOAT, .shape = shape_out, .ndim = 4 },
   };
 
+  dt_hash_t key = dt_hash(DT_INITHASH, in_img, sizeof(float) * 3 * plane);
+  key = dt_hash(key, in_mask, sizeof(float) * plane);
+
   int err = -1;
   g_mutex_lock(&_lock);
-  if(_ensure_loaded())
+  for(int i = 0; i < INPAINT_CACHE_N && err != 0; i++)
+    if(_cache[i].res && _cache[i].key == key)
+    {
+      memcpy(res, _cache[i].res, sizeof(float) * 3 * plane);
+      err = 0;
+    }
+  if(err != 0 && _ensure_loaded())
+  {
     err = dt_ai_run(_ctx, inputs, 2, outputs, 1);
+    if(err == 0)
+    {
+      _inpaint_cached_t *c = &_cache[_cache_next];
+      _cache_next = (_cache_next + 1) % INPAINT_CACHE_N;
+      if(!c->res) c->res = g_try_malloc(sizeof(float) * 3 * plane);
+      if(c->res)
+      {
+        memcpy(c->res, res, sizeof(float) * 3 * plane);
+        c->key = key;
+      }
+    }
+  }
   g_mutex_unlock(&_lock);
 
   if(err == 0)
@@ -218,5 +254,12 @@ void dt_inpaint_cleanup(void)
   if(_env) dt_ai_env_destroy(_env);
   _env = NULL;
   _load_failed = FALSE;
+  for(int i = 0; i < INPAINT_CACHE_N; i++)
+  {
+    g_free(_cache[i].res);
+    _cache[i].res = NULL;
+    _cache[i].key = DT_INVALID_HASH;
+  }
+  _cache_next = 0;
   g_mutex_unlock(&_lock);
 }

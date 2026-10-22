@@ -4099,7 +4099,11 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
           }
           else if(algo == DT_IOP_RETOUCH_AI)
           {
-            _retouch_ai(layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity);
+            // the preview pipe only feeds the navigation thumbnail and the
+            // histogram, and an inference there kept the main view waiting
+            // for the model as long again: it is left out
+            if(!dt_pipe_is_preview(piece->pipe))
+              _retouch_ai(layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity);
           }
           else
             dt_print(DT_DEBUG_ALWAYS,
