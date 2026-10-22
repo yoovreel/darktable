@@ -450,14 +450,14 @@ static void test_subpanel_leaves_only_parametric_chevrons(void **state)
 // section fold states
 // ---------------------------------------------------------------------------
 
-// nothing saved yet: every section starts unfolded, from the defaults in
-// darktableconfig.xml
+// nothing saved yet: the refinements start folded, the other sections
+// unfolded, from the defaults in darktableconfig.xml
 static void test_sections_start_expanded(void **state)
 {
   for(dt_masks_section_t s = 0; s < DT_MASKS_SECTION_COUNT; s++)
   {
-    assert_true(dt_masks_model_section_expanded(s, FALSE));
-    assert_true(dt_masks_model_section_expanded(s, TRUE));
+    assert_int_equal(dt_masks_model_section_expanded(s, FALSE), s != DT_MASKS_SECTION_REFINE);
+    assert_int_equal(dt_masks_model_section_expanded(s, TRUE), s != DT_MASKS_SECTION_REFINE);
   }
 }
 
@@ -482,7 +482,7 @@ static void test_section_state_is_one_config_key_each(void **state)
   dt_masks_model_section_save(DT_MASKS_SECTION_REFINE, FALSE);
   dt_masks_model_section_save(DT_MASKS_SECTION_PROPS, FALSE);
   dt_masks_model_section_save(DT_MASKS_SECTION_CONSUMERS, FALSE);
-  assert_true(dt_conf_get_bool("plugins/darkroom/masks/refinements_collapsed"));
+  assert_true(dt_conf_get_bool("plugins/darkroom/masks/refinements_folded"));
   assert_true(dt_conf_get_bool("plugins/darkroom/masks/properties_collapsed"));
   assert_true(dt_conf_get_bool("plugins/darkroom/masks/consumers_collapsed"));
 

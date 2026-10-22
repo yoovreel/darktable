@@ -1582,7 +1582,6 @@ static const _masks_adjust_t _masks_adjusts[] = {
   { N_("texture"),    "contrastntexture", "gain_fine",         -100.f, 100.f, 0.01f,  0, "" },
   { N_("clarity"),    "contrastntexture", "gain_medium",       -100.f, 100.f, 0.01f,  0, "" },
   { N_("dehaze"),     "hazeremoval",      "strength",          -100.f, 100.f, 0.01f,  0, "" },
-  { N_("vibrance"),   "colorbalancergb",  "vibrance",          -100.f, 100.f, 0.01f,  0, "" },
   { N_("saturation"), "colorbalancergb",  "saturation_global", -100.f, 100.f, 0.01f,  0, "" },
   { N_("sharpness"),  "sharpen",          "amount",               0.f, 100.f, 0.02f,  0, "" },
 };
@@ -4812,7 +4811,7 @@ static inline gpointer _refine_scope_key(dt_iop_gui_blend_data_t *bd)
 }
 
 static const char *const _masks_section_collapsed_key[DT_MASKS_SECTION_COUNT] = {
-  "plugins/darkroom/masks/refinements_collapsed",
+  "plugins/darkroom/masks/refinements_folded",
   "plugins/darkroom/masks/properties_collapsed",
   "plugins/darkroom/masks/consumers_collapsed",
 };
@@ -18762,9 +18761,14 @@ void dt_iop_gui_init_blending(GtkWidget *iopw,
     GtkWidget *mask_panel = GTK_WIDGET(bd->masks_panel_body);
 
     GtkWidget *box = dt_gui_vbox();
+    // a Lightroom mask has no blend modes: the row stays out of the panel, and
+    // the mode of an existing edit is kept, its fulcrum shown when it has one
+    GtkWidget *blend_modes_row =
+      dt_gui_hbox(dt_gui_expand(bd->blend_modes_combo), bd->blend_modes_blend_order);
+    gtk_widget_set_no_show_all(blend_modes_row, TRUE);
+    gtk_widget_hide(blend_modes_row);
     bd->blend_box = GTK_BOX(dt_gui_vbox(
-      dt_gui_hbox(dt_gui_expand(bd->blend_modes_combo), bd->blend_modes_blend_order),
-      bd->blend_mode_parameter_slider, opacity_box));
+      blend_modes_row, bd->blend_mode_parameter_slider, opacity_box));
     dt_gui_add_class(GTK_WIDGET(bd->blend_box), "dt_masks_blend_box");
     _add_wrapped_box(box, bd->blend_box, NULL);
 
