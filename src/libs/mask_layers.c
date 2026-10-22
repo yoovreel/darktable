@@ -302,11 +302,12 @@ static gchar *_signature(void)
   return g_string_free(sig, FALSE);
 }
 
-static gboolean _poll(gpointer user_data)
+// rebuild the list only when what it shows has changed: every slider drag
+// raises a history change, and rebuilding the list each time made the whole
+// panel stutter
+static void _fill_if_changed(dt_lib_module_t *self)
 {
-  dt_lib_module_t *self = user_data;
   dt_lib_mask_layers_t *d = self->data;
-  if(!self->widget || !gtk_widget_get_mapped(self->widget)) return G_SOURCE_CONTINUE;
   gchar *sig = _signature();
   if(g_strcmp0(sig, d->signature))
   {
@@ -316,6 +317,13 @@ static gboolean _poll(gpointer user_data)
   }
   else
     g_free(sig);
+}
+
+static gboolean _poll(gpointer user_data)
+{
+  dt_lib_module_t *self = user_data;
+  if(!self->widget || !gtk_widget_get_mapped(self->widget)) return G_SOURCE_CONTINUE;
+  _fill_if_changed(self);
   return G_SOURCE_CONTINUE;
 }
 
@@ -324,7 +332,7 @@ static gboolean _refresh_idle(gpointer user_data)
   dt_lib_module_t *self = user_data;
   dt_lib_mask_layers_t *d = self->data;
   d->refresh = 0;
-  _fill(self);
+  _fill_if_changed(self);
   return G_SOURCE_REMOVE;
 }
 
@@ -332,6 +340,16 @@ static void _queue_refresh(gpointer instance, dt_lib_module_t *self)
 {
   dt_lib_mask_layers_t *d = self->data;
   if(!d->refresh) d->refresh = g_timeout_add(150, _refresh_idle, self);
+}
+
+// another image, or modules gone: the rows may point at modules that are no
+// more, even where the list would read the same, so it is always rebuilt
+static void _queue_rebuild(gpointer instance, dt_lib_module_t *self)
+{
+  dt_lib_mask_layers_t *d = self->data;
+  g_free(d->signature);
+  d->signature = NULL;
+  _queue_refresh(instance, self);
 }
 
 void gui_init(dt_lib_module_t *self)
@@ -361,9 +379,9 @@ void gui_init(dt_lib_module_t *self)
     dt_conf_set_bool("plugins/darkroom/mask_layers/expanded", TRUE);
 
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_HISTORY_CHANGE, _queue_refresh);
-  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _queue_refresh);
-  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_INITIALIZE, _queue_refresh);
-  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_MODULE_REMOVE, _queue_refresh);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _queue_rebuild);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_INITIALIZE, _queue_rebuild);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_MODULE_REMOVE, _queue_rebuild);
   d->poll = g_timeout_add(400, _poll, self);
 }
 

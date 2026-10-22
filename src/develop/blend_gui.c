@@ -1662,8 +1662,14 @@ static void _masks_adjust_changed(GtkWidget *slider, dt_iop_module_t *src)
     *c = len * _ADJ_MAX_CHROMA;
   }
 
+  // only the module's own widgets: dt_iop_gui_update() would also rebuild its
+  // whole mask panel on every step of the drag, which is what made it stutter
   ++darktable.gui->reset;
-  dt_iop_gui_update(m);
+  if(m->gui_data)
+  {
+    dt_bauhaus_update_from_field(m, NULL, NULL, NULL);
+    if(m->gui_update) m->gui_update(m);
+  }
   --darktable.gui->reset;
   dt_dev_add_history_item(darktable.develop, m, TRUE);
 }
