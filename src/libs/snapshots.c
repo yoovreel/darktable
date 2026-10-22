@@ -519,42 +519,6 @@ int mouse_moved(dt_lib_module_t *self,
   return 0;
 }
 
-static gboolean _take_original = FALSE;
-
-static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget,
-                                                       dt_lib_module_t *self);
-
-// before/after: compare the edit with the original, as other editors' "\\"
-// key does. The first use takes a snapshot of the unedited image; later
-// uses show or hide it
-static void _lib_snapshots_before_after(dt_action_t *action)
-{
-  dt_lib_module_t *self = dt_action_lib(action);
-  dt_lib_snapshots_t *d = self->data;
-  const dt_imgid_t imgid = darktable.develop->image_storage.id;
-
-  int found = -1;
-  for(uint32_t k = 0; k < d->num_snapshots; k++)
-    if(d->snapshot[k].imgid == imgid && d->snapshot[k].history_end == 0)
-      found = k;
-
-  if(found < 0)
-  {
-    if(d->num_snapshots >= MAX_SNAPSHOT)
-    {
-      dt_control_log(_("all %d snapshot slots are in use"), MAX_SNAPSHOT);
-      return;
-    }
-    _take_original = TRUE;
-    _lib_snapshots_add_button_clicked_callback(NULL, self);
-    _take_original = FALSE;
-    found = d->num_snapshots - 1;
-  }
-
-  GtkToggleButton *b = GTK_TOGGLE_BUTTON(d->snapshot[found].button);
-  gtk_toggle_button_set_active(b, !gtk_toggle_button_get_active(b));
-}
-
 static void _lib_snapshots_toggle_last(dt_action_t *action)
 {
   dt_lib_snapshots_t *d = dt_action_lib(action)->data;
@@ -942,8 +906,6 @@ void gui_init(dt_lib_module_t *self)
 
   dt_action_register(DT_ACTION(self), N_("toggle last snapshot"),
                      _lib_snapshots_toggle_last, 0, 0);
-  dt_action_register(DT_ACTION(self), N_("before and after"),
-                     _lib_snapshots_before_after, GDK_KEY_backslash, 0);
 
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, _signal_profile_changed);
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _signal_image_changed);
@@ -1005,15 +967,6 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget,
     s->module = g_strdup(_("original"));
 
   s->history_end = darktable.develop->history_end;
-  if(_take_original)
-  {
-    // the "before" of before/after: the image with no edits
-    g_free(s->module);
-    g_free(s->label);
-    s->module = g_strdup(_("original"));
-    s->label = g_strdup(_("before"));
-    s->history_end = 0;
-  }
   s->imgid = darktable.develop->image_storage.id;
 
   dt_history_snapshot_create(s->imgid, s->id, s->history_end);

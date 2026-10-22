@@ -26,7 +26,6 @@
 #include "common/presets.h"
 #include "control/conf.h"
 #include "control/control.h"
-#include "develop/blend.h"
 #include "develop/develop.h"
 #include "dtgtk/button.h"
 #include "dtgtk/icon.h"
@@ -223,8 +222,7 @@ gboolean expandable(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  // 999 is the tool strip's, between the histogram and this
-  return 998;
+  return 999;
 }
 
 static GtkWidget *_buttons_get_from_pos(dt_lib_module_t *self, const int pos)
@@ -353,7 +351,6 @@ static void _basics_remove_widget(dt_lib_modulegroups_basic_item_t *item)
 
     if(GTK_IS_CONTAINER(item->old_parent) && gtk_widget_get_parent(item->widget) == item->box)
     {
-      if(DT_IS_BAUHAUS_WIDGET(item->widget)) dt_bauhaus_widget_set_compact(item->widget, FALSE);
       g_object_ref(item->widget);
       gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(item->widget)), item->widget);
 
@@ -466,34 +463,6 @@ static void _manage_direct_module_popup(GtkGestureSingle *gesture,
                                         gdouble x,
                                         gdouble y,
                                         dt_lib_module_t *self);
-
-// the quick access panel's sections, named as in other editors' basic panel
-static const char *_basics_last_section = NULL;
-
-static const char *_basics_section(const char *op)
-{
-  static const struct { const char *op, *section; } map[] = {
-    { "temperature", N_("white balance") },  { "channelmixerrgb", N_("white balance") },
-    { "exposure", N_("light") },             { "agx", N_("light") },
-    { "filmicrgb", N_("light") },            { "sigmoid", N_("light") },
-    { "toneequal", N_("light") },            { "rgblevels", N_("light") },
-    { "shadhi", N_("light") },               { "basecurve", N_("light") },
-    { "rgbcurve", N_("light") },             { "tonecurve", N_("light") },
-    { "colorbalancergb", N_("presence") },   { "bilat", N_("presence") },
-    { "hazeremoval", N_("presence") },       { "velvia", N_("presence") },
-    { "contrastntexture", N_("presence") },  { "localcontrast", N_("presence") },
-    { "vibrance", N_("presence") },          { "colorequal", N_("color") },
-    { "colorzones", N_("color") },           { "sharpen", N_("detail") },
-    { "denoiseprofile", N_("detail") },      { "nlmeans", N_("detail") },
-    { "diffuse", N_("detail") },             { "lens", N_("optics") },
-    { "ashift", N_("geometry") },            { "crop", N_("geometry") },
-    { "flip", N_("geometry") },              { "vignette", N_("effects") },
-    { "grain", N_("effects") },
-  };
-  for(size_t i = 0; i < G_N_ELEMENTS(map); i++)
-    if(!strcmp(op, map[i].op)) return map[i].section;
-  return NULL;
-}
 
 static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_item_t *item, GtkWidget *w,
                                dt_lib_modulegroups_basic_item_position_t item_pos)
@@ -617,7 +586,6 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
     if(DT_IS_BAUHAUS_WIDGET(w))
     {
       dt_bauhaus_widget_set_show_extended_label(item->widget, TRUE);
-      dt_bauhaus_widget_set_compact(item->widget, TRUE);
       item->module = dt_bauhaus_widget_get_module(item->widget);
     }
 
@@ -721,29 +689,11 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
 
       gtk_widget_set_valign(btn, GTK_ALIGN_CENTER);
       dt_gui_add_class(btn, "dt_transparent_background");
-      // the header names the kind of adjustment, as an editor's basic panel
-      // does (white balance, light, presence…); the module doing it follows,
-      // dimmed. Modules of the section just started only show their name
-      if(item_pos == FIRST_MODULE) _basics_last_section = NULL;
-      const char *section = _basics_section(item->module->op);
-      if(section && g_strcmp0(section, _basics_last_section))
-      {
-        gchar *up = g_utf8_strup(_(section), -1);
-        GtkWidget *sect = gtk_label_new(up);
-        g_free(up);
-        gtk_label_set_xalign(GTK_LABEL(sect), 0.0);
-        dt_gui_add_class(sect, "dt_basics_section");
-        gtk_widget_show(sect);
-        gtk_box_pack_start(GTK_BOX(header_box), sect, FALSE, FALSE, 0);
-      }
-      _basics_last_section = section;
-
-      GtkWidget *modname = gtk_label_new(item->module->name());
-      gtk_label_set_xalign(GTK_LABEL(modname), section ? 1.0 : 0.0);
-      gtk_label_set_ellipsize(GTK_LABEL(modname), PANGO_ELLIPSIZE_END);
-      dt_gui_add_class(modname, section ? "dt_basics_module" : "dt_basics_section");
-      gtk_widget_show(modname);
-      gtk_box_pack_start(GTK_BOX(header_box), modname, TRUE, TRUE, 0);
+      // we add to the module header the section label and the link to the full iop
+      GtkWidget *sect = dt_ui_section_label_new(item->module->name());
+      gtk_label_set_xalign(GTK_LABEL(sect), 0.5); // we center the module name
+      gtk_widget_show(sect);
+      gtk_box_pack_start(GTK_BOX(header_box), sect, TRUE, TRUE, 0);
     }
     else if(item_pos == FIRST_MODULE)
       // if there is no label, we handle separately in css the first module header
@@ -822,80 +772,6 @@ _basics_add_items_from_module_widget(dt_lib_module_t *self, dt_iop_module_t *mod
   return item_pos;
 }
 
-// under the quick access panel, the next panels of an editor's develop
-// view: one row each, opening the module that does the job
-static const struct { const char *label, *op; } _panel_rows[] = {
-  { N_("tone curve"), "rgbcurve" },
-  { N_("color mixer"), "colorequal" },
-  { N_("color grading"), "colorbalancergb" },
-  { N_("detail"), "sharpen" },
-  { N_("lens corrections"), "lens" },
-};
-
-static void _panel_row_clicked(GtkButton *button, dt_lib_module_t *self)
-{
-  dt_develop_t *dev = darktable.develop;
-  const char *op = g_object_get_data(G_OBJECT(button), "op");
-  if(!op)
-  {
-    // all modules
-    _lib_modulegroups_set(self, DT_MODULEGROUP_NONE);
-    return;
-  }
-  dt_iop_module_t *m = dt_iop_get_module_from_list(dev->iop, op);
-  if(!m)
-  {
-    dt_control_log(_("%s is not available"), dt_iop_get_localized_name(op));
-    return;
-  }
-  dt_dev_modulegroups_switch(dev, m);
-  // a module in none of the layout's groups: show them all, it is among them
-  if(m->expander && !gtk_widget_get_visible(m->expander))
-    _lib_modulegroups_set(self, DT_MODULEGROUP_NONE);
-  dt_iop_request_focus(m);
-  dt_iop_gui_set_expanded(m, TRUE, TRUE);
-  dt_iop_gui_scroll_into_view_later(m->expander);
-}
-
-static void _basics_add_panel_rows(dt_lib_module_t *self)
-{
-  dt_lib_modulegroups_t *d = self->data;
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_widget_set_name(box, "basics-panel-rows");
-
-  int n = 0;
-  for(const GList *l = darktable.develop->iop; l; l = g_list_next(l))
-  {
-    const dt_iop_module_t *m = l->data;
-    if(!dt_iop_is_hidden((dt_iop_module_t *)m) && !(m->flags() & IOP_FLAGS_DEPRECATED)
-       && m->multi_priority == 0)
-      n++;
-  }
-
-  for(int i = 0; i <= (int)G_N_ELEMENTS(_panel_rows); i++)
-  {
-    const gboolean all = i == (int)G_N_ELEMENTS(_panel_rows);
-    gchar *text = all ? g_strdup_printf(_("all modules (%d)"), n)
-                      : g_strdup(_(_panel_rows[i].label));
-    GtkWidget *b = gtk_button_new();
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    GtkWidget *lb = gtk_label_new(text);
-    g_free(text);
-    gtk_label_set_xalign(GTK_LABEL(lb), 0.0);
-    GtkWidget *chev = gtk_label_new("›");
-    dt_gui_add_class(chev, "dt_panel_row_chevron");
-    gtk_box_pack_start(GTK_BOX(row), lb, TRUE, TRUE, 0);
-    gtk_box_pack_end(GTK_BOX(row), chev, FALSE, FALSE, 0);
-    gtk_container_add(GTK_CONTAINER(b), row);
-    dt_gui_add_class(b, "dt_panel_row");
-    if(!all) g_object_set_data(G_OBJECT(b), "op", (gpointer)_panel_rows[i].op);
-    g_signal_connect(b, "clicked", G_CALLBACK(_panel_row_clicked), self);
-    gtk_box_pack_start(GTK_BOX(box), b, FALSE, FALSE, 0);
-  }
-  gtk_widget_show_all(box);
-  gtk_box_pack_start(GTK_BOX(d->vbox_basic), box, FALSE, FALSE, 0);
-}
-
 static void _basics_show(dt_lib_module_t *self)
 {
   dt_lib_modulegroups_t *d = self->data;
@@ -950,7 +826,6 @@ static void _basics_show(dt_lib_module_t *self)
     }
   }
 
-  _basics_add_panel_rows(self);
   gtk_widget_show(d->vbox_basic);
 
   DT_LEAVE_GUI_UPDATE();
@@ -1778,8 +1653,6 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
     AM("colorequal/graph");                        \
     AM("colorequal/node placement");               \
     AM("exposure/exposure");                       \
-    AM("shadhi/shadows");                          \
-    AM("shadhi/highlights");                       \
     if(!is_scene_referred)                         \
     {                                              \
       /* contrast is already in filmic/sigmoid */  \
@@ -1799,7 +1672,6 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       AM("contrastntexture/fine details");         \
     else                                           \
       AM("bilat/detail");                          \
-    AM("hazeremoval/strength");                    \
   }
 
 // start module group

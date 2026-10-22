@@ -263,13 +263,7 @@ static void _lib_viewswitcher_view_changed_callback(gpointer instance, dt_view_t
 static GtkWidget *_lib_viewswitcher_create_label(dt_view_t *view)
 {
   GtkWidget *eb = gtk_event_box_new();
-  // the two views everyone uses get the names photographers know them by;
-  // the tooltip keeps darktable's own, which the manual and shortcuts use
-  const char *shown = view->name(view);
-  if(!strcmp(view->module_name, "lighttable")) shown = _("library");
-  else if(!strcmp(view->module_name, "darkroom")) shown = _("edit");
-  GtkWidget *b = gtk_label_new(shown);
-  if(shown != view->name(view)) gtk_widget_set_tooltip_text(eb, view->name(view));
+  GtkWidget *b = gtk_label_new(view->name(view));
   gtk_container_add(GTK_CONTAINER(eb), b);
   /*setup label*/
   gtk_widget_set_halign(b, GTK_ALIGN_START);

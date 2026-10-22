@@ -70,7 +70,7 @@ uint32_t container(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  // under the presets / history / snapshots tabs (1100, 900, 1000)
+  // under snapshots (1000) and history (900)
   return 880;
 }
 

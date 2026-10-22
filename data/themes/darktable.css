@@ -4372,3 +4372,78 @@ popover.dt_masks_precise_anchor
 {
   opacity: 0;
 }
+
+/* masks list in the left panel (libs/mask_layers.c) */
+#mask-layers .dt_mask_layer button
+{
+  border: 0;
+  background-color: transparent;
+}
+
+#mask-layers .dt_mask_layer:hover,
+#mask-layers .dt_mask_layer_card.dt_mask_layer_card_active
+{
+  background-color: @collapsible_bg_color;
+}
+
+#mask-layers .dt_mask_layer.dt_mask_layer_active
+{
+  background-color: @selected_bg_color;
+}
+
+#mask-layers .dt_mask_layer_swatch
+{
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 3px;
+  background-color: alpha(#E0457B, 0.55);
+  margin: 0 0.28em;
+}
+
+#mask-layers .dt_mask_parts
+{
+  margin: 0.14em 0.28em 0.42em 1.6em;
+}
+
+#mask-layers .dt_mask_part_plus,
+#mask-layers .dt_mask_part_minus
+{
+  font-size: 0.8em;
+  padding: 0 0.35em;
+}
+
+#mask-layers .dt_mask_part_plus
+{
+  color: #7FD18B;
+}
+
+#mask-layers .dt_mask_part_minus
+{
+  color: #FF8A8A;
+}
+
+#mask-layers .dt_mask_mode.dt_mask_mode_active
+{
+  border-color: @bauhaus_fill;
+  color: @bauhaus_fill;
+}
+
+/* "adjust" sliders on a mask (develop/blend_gui.c) */
+.dt_masks_adjust_title
+{
+  color: @section_label;
+  margin: 0.56em 0 0.21em 0;
+}
+
+.dt_masks_adjust_reset
+{
+  padding: 0 0.56em;
+  margin: 0.42em 0 0.14em 0;
+}
+
+/* the AI remove tool's hint (iop/retouch.c) */
+.dt_retouch_ai_hint
+{
+  padding: 0.42em 0.56em;
+  margin: 0.42em 0;
+}

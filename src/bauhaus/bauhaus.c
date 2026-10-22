@@ -111,8 +111,6 @@ struct _DtBauhausWidget
   // label text, short
   char *label;
   gboolean show_label;
-  // single-row slider: label on the left, track in the middle, value on the right
-  gboolean compact;
   // how the label is shortened when it does not fit
   PangoEllipsizeMode label_ellipsis;
   // section, short
@@ -1308,13 +1306,6 @@ const char* dt_bauhaus_widget_get_label(GtkWidget *widget)
   return w->label;
 }
 
-void dt_bauhaus_widget_set_compact(GtkWidget *widget,
-                                   const gboolean compact)
-{
-  DT_BAUHAUS_WIDGET(widget)->compact = compact;
-  gtk_widget_queue_resize(widget);
-}
-
 void dt_bauhaus_widget_hide_label(GtkWidget *widget)
 {
   dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
@@ -1373,27 +1364,6 @@ static float _widget_width(const dt_bauhaus_widget_t *w)
                    - _widget_get_quad_width(w));
 }
 
-#define COMPACT_LABEL_W 82.0f
-#define COMPACT_VALUE_W 68.0f
-#define COMPACT_GAP 6.0f
-
-static gboolean _is_compact(const dt_bauhaus_widget_t *w)
-{
-  return w->compact && w->type == DT_BAUHAUS_SLIDER;
-}
-
-// where the slider track starts, and how wide it is
-static float _track_x0(const dt_bauhaus_widget_t *w)
-{
-  return _is_compact(w) ? COMPACT_LABEL_W + COMPACT_GAP : 0.0f;
-}
-
-static float _track_w(const dt_bauhaus_widget_t *w)
-{
-  if(!_is_compact(w)) return _widget_width(w);
-  return MAX(1.0f, _widget_width(w) - COMPACT_LABEL_W - COMPACT_VALUE_W - 2.0f * COMPACT_GAP);
-}
-
 gchar *dt_bauhaus_widget_get_tooltip_markup(GtkWidget *widget,
                                             const int x,
                                             const int y)
@@ -1409,9 +1379,9 @@ gchar *dt_bauhaus_widget_get_tooltip_markup(GtkWidget *widget,
     dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
     dt_bauhaus_slider_data_t *d = &w->slider;
 
-    const float pos = (x - w->margin.left - w->padding.left - _track_x0(w)) / _track_w(w);
+    const float pos = (x - w->margin.left - w->padding.left) / _widget_width(w);
 
-    if((_is_compact(w) || y > darktable.bauhaus->line_height / 2.0f + w->margin.top + w->padding.top)
+    if(y > darktable.bauhaus->line_height / 2.0f + w->margin.top + w->padding.top
        && pos <= 1.0f)
       dt_util_str_cat(&markup, "%s<b>%s</b>", markup ? "\n" : "",
                                dt_bauhaus_slider_get_text(widget, pos * (d->max - d->min) + d->min));
@@ -2356,7 +2326,7 @@ static void _draw_indicator(dt_bauhaus_widget_t *w,
   // a slider reserves a text line above its baseline for its label. With the
   // label hidden and a height given (content_height > 0), the baseline is
   // centered in that height instead. The popup passes -1
-  const float htm = ((!w->show_label || w->compact) && content_height > 0.0f)
+  const float htm = (!w->show_label && content_height > 0.0f)
     ? (content_height - htM) / 2.0f
     : bh->line_height + INNER_PADDING;
 
@@ -2553,7 +2523,7 @@ static void _draw_baseline(dt_bauhaus_widget_t *w,
   const float htM = bh->baseline_size - bh->border_width;
 
   // pos of baseline, centered when the label is hidden (see _draw_indicator)
-  const float htm = ((!w->show_label || w->compact) && content_height > 0.0f)
+  const float htm = (!w->show_label && content_height > 0.0f)
     ? (content_height - htM) / 2.0f
     : bh->line_height + INNER_PADDING;
 
@@ -3081,49 +3051,6 @@ static gboolean _widget_draw(GtkWidget *widget,
     }
     case DT_BAUHAUS_SLIDER:
     {
-      if(_is_compact(w))
-      {
-        const float x0 = _track_x0(w), tw = _track_w(w);
-        // a thicker track and a bigger marker, easier to see and to grab
-        dt_bauhaus_t *bhc = darktable.bauhaus;
-        const float old_base = bhc->baseline_size, old_mark = bhc->marker_size;
-        bhc->baseline_size = old_base * 1.6f;
-        bhc->marker_size = old_mark * 1.5f;
-        cairo_save(cr);
-        cairo_translate(cr, x0, 0);
-        _draw_baseline(w, cr, tw, h3);
-        if(gtk_widget_is_sensitive(widget))
-        {
-          cairo_save(cr);
-          cairo_rectangle(cr, -8, 0, tw + 16, h3 + INNER_PADDING);
-          cairo_clip(cr);
-          _draw_indicator(w, w->slider.pos, cr, tw, *fg_color, *bg_color, h3);
-          cairo_restore(cr);
-        }
-        cairo_restore(cr);
-        bhc->baseline_size = old_base;
-        bhc->marker_size = old_mark;
-
-        set_color(cr, *text_color);
-        gchar *label_full = _build_label(w);
-        // "global vibrance" -> "vibrance": the row has little room
-        const char *label_text = label_full && g_str_has_prefix(label_full, "global ")
-                               ? label_full + 7 : label_full;
-        float lw = 0, lh = 0;
-        _show_pango_text(w, context, cr, label_text, 0, 0, COMPACT_LABEL_W,
-                         FALSE, TRUE, PANGO_ELLIPSIZE_END, FALSE, TRUE, &lw, &lh);
-        _show_pango_text(w, context, cr, label_text, 0, floorf((h3 - lh) / 2.0f), COMPACT_LABEL_W,
-                         FALSE, FALSE, PANGO_ELLIPSIZE_END, FALSE, TRUE, NULL, NULL);
-        g_free(label_full);
-        if(gtk_widget_is_sensitive(widget))
-        {
-          char *text = dt_bauhaus_slider_get_text(widget, dt_bauhaus_slider_get(widget));
-          _show_pango_text(w, context, cr, text, w3, floorf((h3 - lh) / 2.0f), COMPACT_VALUE_W,
-                           TRUE, FALSE, PANGO_ELLIPSIZE_END, FALSE, FALSE, NULL, NULL);
-          g_free(text);
-        }
-        break;
-      }
       // line for orientation
       _draw_baseline(w, cr, w3, h3);
 
@@ -3302,12 +3229,7 @@ static void _widget_get_preferred_height(GtkWidget *widget,
   {
     *minimum_height += darktable.bauhaus->line_height;
   }
-  if(_is_compact(w))
-  {
-    // one row: the line height is all it needs
-    *minimum_height += 2 * INNER_PADDING + 8;
-  }
-  else if(w->type == DT_BAUHAUS_SLIDER)
+  if(w->type == DT_BAUHAUS_SLIDER)
   {
     // the lower thing to draw is indicator. See _draw_baseline for compute details
     *minimum_height += INNER_PADDING
@@ -4149,8 +4071,8 @@ static void _widget_button_press(GtkGestureSingle *gesture,
     gtk_widget_grab_focus(widget);
   }
 
-  const float width = _track_w(w);
-  const float pos = (x - w->margin.left - w->padding.left - _track_x0(w)) / width;
+  const float width = _widget_width(w);
+  const float pos = (x - w->margin.left - w->padding.left) / width;
 
   const guint button = gtk_gesture_single_get_current_button(gesture);
 
@@ -4195,7 +4117,7 @@ static void _widget_button_press(GtkGestureSingle *gesture,
     d->is_dragging = -1;
     if(!dt_modifier_eq(gesture, 0) || passthrough_from_histogram)
       bh->mouse_x = x;
-    else if(pos >= 0.0f && pos <= 1.0f && (_is_compact(w) || y > .5 * bh->line_height + w->margin.top + w->padding.top))
+    else if(pos <= 1.0f && y > .5 * bh->line_height + w->margin.top + w->padding.top)
     {
       bh->mouse_x = NAN;
       w->slider.timeout_handle = G_MAXUINT;
@@ -4241,8 +4163,8 @@ static void _widget_motion(GtkEventControllerMotion *controller,
   dt_bauhaus_slider_data_t *d = &w->slider;
   dt_bauhaus_t *bh = darktable.bauhaus;
 
-  const float width = _track_w(w);
-  const float pos = (x - w->margin.left - w->padding.left - _track_x0(w)) / width;
+  const float width = _widget_width(w);
+  const float pos = (x - w->margin.left - w->padding.left) / width;
 
   if(w->type == DT_BAUHAUS_COMBOBOX)
   {

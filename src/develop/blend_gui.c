@@ -1765,7 +1765,6 @@ static GtkWidget *_masks_adjust_box_new(dt_iop_module_t *module)
     else if(i == _ADJ_TINT)
       dt_bauhaus_slider_set_stop(w, 0.0f, 0.35f, 0.70f, 0.40f),
       dt_bauhaus_slider_set_stop(w, 1.0f, 0.75f, 0.35f, 0.70f);
-    dt_bauhaus_widget_set_compact(w, TRUE);
     g_object_set_data(G_OBJECT(w), "dt-adjust-index", GINT_TO_POINTER(i));
     g_signal_connect(G_OBJECT(w), "value-changed", G_CALLBACK(_masks_adjust_changed), module);
     bd->masks_adjust_sliders[i] = w;
@@ -1908,8 +1907,8 @@ GList *dt_iop_gui_blend_mask_parts(dt_iop_module_t *module)
   return out;
 }
 
-// the tool strip's "masks" button: Lightroom starts a mask with its own set
-// of adjustments. Here that is a new exposure instance, named "mask N", with
+// the masks list's "new mask" button: Lightroom starts a mask with its own
+// set of adjustments. Here that is a new exposure instance, named "mask N", with
 // a drawn mask switched on and its masks panel open, so the next step is
 // picking a shape or an AI object
 dt_iop_module_t *dt_iop_gui_blend_new_mask_adjustment(void)

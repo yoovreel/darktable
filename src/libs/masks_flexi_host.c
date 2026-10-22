@@ -75,9 +75,8 @@ uint32_t container(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  // under the masks list (880), past the presets / history / snapshots tabs
-  // (1200 and 1100, 900, 1000) and above the duplicate manager (850) and the
-  // color picker (800). A position the user gives it by dragging is stored
+  // under the masks list (880), past snapshots (1000) and history (900), and
+  // above the duplicate manager (850) and the color picker (800). A position the user gives it by dragging is stored
   // and wins over this one (_lib_position in libs/lib.c)
   return 870;
 }
