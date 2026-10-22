@@ -709,7 +709,8 @@ static int _ellipse_events_button_pressed(dt_iop_module_t *module,
       // spots and retouch have their own handling of creation_continuous
       if(gui->creation_continuous
          && (dt_iop_module_is(crea_module, "spots")
-             || dt_iop_module_is(crea_module, "retouch")))
+             || dt_iop_module_is(crea_module, "retouch")
+             || dt_iop_module_is(crea_module, "airemove")))
         dt_masks_set_edit_mode_single_form(crea_module, form->formid, DT_MASKS_EDIT_FULL);
       else if(!gui->creation_continuous)
         dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
@@ -756,7 +757,8 @@ static int _ellipse_events_button_pressed(dt_iop_module_t *module,
     if(gui->creation_continuous
        && (!crea_module
            || (!dt_iop_module_is(crea_module, "spots")
-               && !dt_iop_module_is(crea_module, "retouch"))))
+               && !dt_iop_module_is(crea_module, "retouch")
+               && !dt_iop_module_is(crea_module, "airemove"))))
     {
       if(crea_module)
       {

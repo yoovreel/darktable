@@ -2792,7 +2792,8 @@ static void _toggle_mask_visibility_callback(dt_action_t *action)
   //different buttons associated keep the shortcuts independent
   if(mod
      && !dt_iop_module_is(mod, "spots")
-     && !dt_iop_module_is(mod, "retouch"))
+     && !dt_iop_module_is(mod, "retouch")
+     && !dt_iop_module_is(mod, "airemove"))
   {
     dt_iop_gui_blend_data_t *bd = mod->blend_data;
 

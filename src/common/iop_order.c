@@ -95,6 +95,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {12.0f }, "exposure", 0},
   { {13.0f }, "spots", 0},
   { {14.0f }, "retouch", 0},
+  { {14.5f }, "airemove", 0},
   { {15.0f }, "lens", 0},
   { {15.5f }, "cacorrectrgb", 0},
   { {16.0f }, "ashift", 0},
@@ -210,6 +211,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { {18.0f }, "liquify", 0},
   { {19.0f }, "spots", 0},
   { {20.0f }, "retouch", 0},
+  { {20.5f }, "airemove", 0},
   { {21.0f }, "exposure", 0},
   { {22.0f }, "mask_manager", 0},
   { {23.0f }, "tonemap", 0},
@@ -333,6 +335,7 @@ const dt_iop_order_entry_t v50_order[] = {
   { {18.0f }, "liquify", 0},
   { {19.0f }, "spots", 0},
   { {20.0f }, "retouch", 0},
+  { {20.5f }, "airemove", 0},
   { {21.0f }, "exposure", 0},
   { {22.0f }, "mask_manager", 0},
   { {23.0f }, "tonemap", 0},
@@ -458,6 +461,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   { { 28.0f }, "liquify", 0},
   { { 28.0f }, "spots", 0},
   { { 28.0f }, "retouch", 0},
+  { { 28.0f }, "airemove", 0},
   { { 28.0f }, "exposure", 0},
   { { 28.0f }, "mask_manager", 0},
   { { 28.0f }, "tonemap", 0},
@@ -584,6 +588,7 @@ const dt_iop_order_entry_t v50_jpg_order[] = {
   { { 28.0f }, "liquify", 0},
   { { 28.0f }, "spots", 0},
   { { 28.0f }, "retouch", 0},
+  { { 28.0f }, "airemove", 0},
   { { 28.0f }, "exposure", 0},
   { { 28.0f }, "mask_manager", 0},
   { { 28.0f }, "tonemap", 0},
@@ -767,6 +772,7 @@ void dt_ioppr_migrate_legacy_iop_order_list(GList *iop_order_list)
   _insert_before_after(iop_order_list, "highlights", "rasterfile", TRUE);
   _insert_before_after(iop_order_list, "demosaic", "demosaicscale", FALSE);
   _insert_before_after(iop_order_list, "colorbalance", "colorharmonizer", TRUE);
+  _insert_before_after(iop_order_list, "retouch", "airemove", FALSE);
 }
 
 static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)

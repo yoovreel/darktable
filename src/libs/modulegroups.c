@@ -1777,6 +1777,7 @@ void init_presets(dt_lib_module_t *self)
   AM("rasterfile");
   AM("rawdenoise");
   AM("retouch");
+  AM("airemove");
   AM("rotatepixels");
   AM("scalepixels");
   AM("sharpen");
@@ -1835,6 +1836,7 @@ void init_presets(dt_lib_module_t *self)
   AM("borders");
   AM("monochrome");
   AM("retouch");
+  AM("airemove");
   AM("sharpen");
   AM("vignette");
   AM("watermark");
@@ -1875,6 +1877,7 @@ void init_presets(dt_lib_module_t *self)
   AM("hotpixels");
   AM("lens");
   AM("retouch");
+  AM("airemove");
   AM("liquify");
   AM("rasterfile");
   AM("sharpen");
@@ -1933,6 +1936,7 @@ void init_presets(dt_lib_module_t *self)
   AM("hotpixels");
   AM("lens");
   AM("retouch");
+  AM("airemove");
   AM("liquify");
   AM("rasterfile");
   AM("sharpen");

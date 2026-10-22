@@ -198,17 +198,33 @@ typedef struct dt_iop_retouch_global_data_t
 // this returns a translatable name
 const char *name()
 {
+#ifdef DT_RETOUCH_AI_ONLY
+  return _("AI remove");
+#else
   return _("retouch");
+#endif
 }
 
 const char *aliases()
 {
+#ifdef DT_RETOUCH_AI_ONLY
+  return _("remove|object removal|content aware|inpainting|distraction");
+#else
   return _("split-frequency|healing|cloning|stamp|blur|fill|wavelets|spot removal");
+#endif
 }
 
 
 const char **description(dt_iop_module_t *self)
 {
+#ifdef DT_RETOUCH_AI_ONLY
+  return dt_iop_set_description(self, _("paint over people, signs or objects\n"
+                                        "and AI fills them with matching background"),
+                                      _("corrective"),
+                                      _("linear, RGB, scene-referred"),
+                                      _("geometric, RGB"),
+                                      _("linear, RGB, scene-referred"));
+#endif
   return dt_iop_set_description(self, _("remove and clone spots,\n"
                                         "perform split-frequency skin editing"),
                                       _("corrective"),
@@ -1919,8 +1935,13 @@ static void rt_add_shape_callback(GtkGestureSingle *gesture,
 
   dt_iop_color_picker_reset(self, TRUE);
 
+#ifdef DT_RETOUCH_AI_ONLY
+  // the brush stays on for the next stroke, until it is clicked again
+  const gboolean creation_continuous = TRUE;
+#else
   const gboolean creation_continuous =
     dt_modifier_is(dt_gui_current_state(gesture), GDK_CONTROL_MASK);
+#endif
 
   rt_add_shape(widget, creation_continuous, self);
 
@@ -2154,6 +2175,16 @@ void masks_selection_changed(dt_iop_module_t *self, const int form_selected_id)
   dt_iop_gui_leave_critical_section(self);
 }
 
+// AI remove is retouch's AI remove tool alone, so that is its only algorithm
+static dt_iop_retouch_algo_type_t _default_algorithm(void)
+{
+#ifdef DT_RETOUCH_AI_ONLY
+  return DT_IOP_RETOUCH_AI;
+#else
+  return dt_conf_get_int("plugins/darkroom/retouch/default_algo");
+#endif
+}
+
 void init(dt_iop_module_t *self)
 {
   dt_iop_default_init(self);
@@ -2163,7 +2194,7 @@ void init(dt_iop_module_t *self)
   d->preview_levels[0] = RETOUCH_PREVIEW_LVL_MIN;
   d->preview_levels[1] = 0.f;
   d->preview_levels[2] = RETOUCH_PREVIEW_LVL_MAX;
-  d->algorithm = dt_conf_get_int("plugins/darkroom/retouch/default_algo");
+  d->algorithm = _default_algorithm();
 }
 
 void init_global(dt_iop_module_so_t *self)
@@ -2451,11 +2482,17 @@ void gui_init(dt_iop_module_t *self)
 
   // shapes toolbar
   g->label_form = GTK_LABEL(gtk_label_new("-1"));
+#ifdef DT_RETOUCH_AI_ONLY
+  GtkWidget *hbox_shapes = dt_gui_hbox(dt_ui_label_new(_("strokes:")), g->label_form);
+  gtk_widget_set_tooltip_text
+    (hbox_shapes, _("click the brush, then paint over what to remove"));
+#else
   GtkWidget *hbox_shapes = dt_gui_hbox(dt_ui_label_new(_("shapes:")), g->label_form);
   gtk_widget_set_tooltip_text
     (hbox_shapes,
      _("to add a shape select an algorithm and a shape type and click on the image.\n"
        "shapes are added to the current scale"));
+#endif
 
   g->bt_edit_masks = dt_iop_togglebutton_new
     (self, N_("editing"),
@@ -2720,9 +2757,30 @@ void gui_init(dt_iop_module_t *self)
   dt_gui_add_class(g->lbl_ai_hint, "dt_retouch_ai_hint");
   gtk_widget_set_no_show_all(g->lbl_ai_hint, TRUE);
 
+#ifdef DT_RETOUCH_AI_ONLY
+  // the brush alone: the other shapes and the algorithms stay out of sight,
+  // and so does the hint's offline note, said once in retouch
+  gtk_label_set_text(GTK_LABEL(g->lbl_ai_hint),
+                     _("click the brush, then paint over a person, sign or object:"
+                       " AI fills it with matching background. the brush stays on"
+                       " for the next stroke; click it again to stop"));
+  gtk_widget_set_tooltip_text(g->bt_brush, _("paint over what to remove"));
+  GtkWidget *hidden[] = { g->bt_path, g->bt_ellipse, g->bt_circle, hbox_algo };
+  for(int i = 0; i < G_N_ELEMENTS(hidden); i++)
+  {
+    gtk_widget_set_no_show_all(hidden[i], TRUE);
+    gtk_widget_hide(hidden[i]);
+  }
+#endif
+
   // start building top level widget
+#ifdef DT_RETOUCH_AI_ONLY
+  GtkWidget *tools_label = dt_ui_section_label_new(C_("section", "remove"));
+#else
+  GtkWidget *tools_label = dt_ui_section_label_new(C_("section", "retouch tools"));
+#endif
   self->widget = dt_gui_vbox
-    (dt_ui_section_label_new(C_("section", "retouch tools")),
+    (tools_label,
      hbox_shapes, hbox_algo,
      g->lbl_ai_hint,
      g->vbox_wavelet,
@@ -2740,14 +2798,14 @@ void gui_reset(dt_iop_module_t *self)
   dt_masks_reset_form_gui();
   // set the algo to the default one
   dt_iop_retouch_params_t *p = self->params;
-  p->algorithm = dt_conf_get_int("plugins/darkroom/retouch/default_algo");
+  p->algorithm = _default_algorithm();
 }
 
 void reload_defaults(dt_iop_module_t *self)
 {
   // set the algo to the default one
   dt_iop_retouch_params_t *p = self->default_params;
-  p->algorithm = dt_conf_get_int("plugins/darkroom/retouch/default_algo");
+  p->algorithm = _default_algorithm();
 }
 
 static void rt_compute_roi_in(dt_iop_module_t *self,
