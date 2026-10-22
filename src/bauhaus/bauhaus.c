@@ -1373,9 +1373,9 @@ static float _widget_width(const dt_bauhaus_widget_t *w)
                    - _widget_get_quad_width(w));
 }
 
-#define COMPACT_LABEL_W 78.0f
-#define COMPACT_VALUE_W 62.0f
-#define COMPACT_GAP 8.0f
+#define COMPACT_LABEL_W 82.0f
+#define COMPACT_VALUE_W 68.0f
+#define COMPACT_GAP 6.0f
 
 static gboolean _is_compact(const dt_bauhaus_widget_t *w)
 {
