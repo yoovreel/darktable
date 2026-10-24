@@ -103,6 +103,21 @@ static void _switch_toggled(GtkToggleButton *button, dt_lib_module_t *self)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->off), on);
 }
 
+static void _mask_switch_toggled(GtkToggleButton *button, dt_lib_module_t *self)
+{
+  GList *members = g_object_get_data(G_OBJECT(button), "members");
+  dt_develop_t *dev = darktable.develop;
+  if(!dev) return;
+  const gboolean on = gtk_toggle_button_get_active(button);
+  for(const GList *l = members; l; l = g_list_next(l))
+  {
+    dt_iop_module_t *m = l->data;
+    if(!g_list_find(dev->iop, m) || !m->off) continue;
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->off)) != on)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->off), on);
+  }
+}
+
 static void _new_clicked(GtkButton *button, dt_lib_module_t *self)
 {
   if(dt_iop_gui_blend_new_mask_adjustment())
@@ -215,45 +230,108 @@ static GtkWidget *_parts_box(dt_lib_module_t *self, dt_iop_module_t *m)
   return box;
 }
 
+// a mask is the name its adjustments share: an adjustment created for a mask
+// is named after it (see blend_gui.c). A masked module with no name of its
+// own is a mask by itself
+static gchar *_mask_key(const dt_iop_module_t *m)
+{
+  if(m->multi_name_hand_edited && m->multi_name[0])
+    return dt_util_localize_segmented_name(m->multi_name, FALSE);
+  return NULL;
+}
+
+// the adjustments of the mask that holds the module `m`, top of the pipe first
+static GList *_mask_members(const dt_iop_module_t *m)
+{
+  GList *res = NULL;
+  gchar *key = _mask_key(m);
+  dt_develop_t *dev = darktable.develop;
+  for(const GList *l = dev ? g_list_last(dev->iop) : NULL; l; l = g_list_previous(l))
+  {
+    dt_iop_module_t *o = l->data;
+    if(!o->expander || !_has_mask(o) || dt_iop_is_hidden(o)) continue;
+    gchar *k = _mask_key(o);
+    if(o == m || (key && !g_strcmp0(k, key))) res = g_list_append(res, o);
+    g_free(k);
+  }
+  g_free(key);
+  return res;
+}
+
+static void _delete_clicked(GtkButton *button, dt_lib_module_t *self)
+{
+  dt_iop_module_t *m = g_object_get_data(G_OBJECT(button), "module");
+  dt_develop_t *dev = darktable.develop;
+  if(!m || !dev || !g_list_find(dev->iop, m)) return;
+  GList *members = _mask_members(m);
+  const int n = g_list_length(members);
+  gchar *key = _mask_key(m);
+  const gboolean yes = dt_gui_show_yes_no_dialog(
+      _("delete mask"), "mask_delete",
+      n > 1 ? _("delete the mask \"%s\" and its %d adjustments?")
+            : _("delete the mask \"%s\" and its adjustment?"),
+      key ? key : m->name(), n);
+  g_free(key);
+  if(yes)
+    for(GList *l = members; l; l = g_list_next(l))
+    {
+      dt_iop_module_t *o = l->data;
+      if(g_list_find(dev->iop, o)) dt_iop_gui_delete(o);
+    }
+  g_list_free(members);
+}
+
 static void _fill(dt_lib_module_t *self)
 {
   dt_lib_mask_layers_t *d = self->data;
   dt_gui_container_destroy_children(GTK_CONTAINER(d->list));
   dt_develop_t *dev = darktable.develop;
   int n = 0;
+  const dt_iop_module_t *focus = dt_dev_gui_module();
+  GList *done = NULL; // the modules already shown as part of a mask
 
   // top of the pipe first, as layers are listed
   for(const GList *l = dev ? g_list_last(dev->iop) : NULL; l; l = g_list_previous(l))
   {
     dt_iop_module_t *m = l->data;
     if(!m->expander || !_has_mask(m) || dt_iop_is_hidden(m)) continue;
+    if(g_list_find(done, m)) continue;
+
+    GList *members = _mask_members(m);
+    done = g_list_concat(done, g_list_copy(members));
+    gboolean active = FALSE, any_on = FALSE;
+    dt_iop_module_t *anchor = m;
+    for(const GList *k = members; k; k = g_list_next(k))
+    {
+      dt_iop_module_t *o = k->data;
+      if(o == focus) { active = TRUE; anchor = o; }
+      if(o->enabled) any_on = TRUE;
+    }
 
     GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     dt_gui_add_class(row, "dt_mask_layer");
 
     GtkWidget *sw = dtgtk_togglebutton_new(dtgtk_cairo_paint_eye, 0, NULL);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sw), m->enabled);
-    gtk_widget_set_tooltip_text(sw, _("show or hide this adjustment"));
-    g_object_set_data(G_OBJECT(sw), "module", m);
-    g_signal_connect(sw, "toggled", G_CALLBACK(_switch_toggled), self);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sw), any_on);
+    gtk_widget_set_tooltip_text(sw, _("show or hide this mask's adjustments"));
     dt_gui_add_class(sw, "dt_transparent_background");
 
-    const gboolean named = m->multi_name[0] && strcmp(m->multi_name, "0");
-    gchar *text = named
-      ? g_markup_printf_escaped("%s  <span alpha=\"60%%\">%s</span>", m->multi_name, m->name())
-      : g_markup_printf_escaped("%s", m->name());
+    gchar *key = _mask_key(m);
     GtkWidget *btn = gtk_button_new();
     GtkWidget *lb = gtk_label_new(NULL);
+    gchar *text = key ? g_markup_printf_escaped("%s", key)
+                      : g_markup_printf_escaped("%s", m->name());
     gtk_label_set_markup(GTK_LABEL(lb), text);
     g_free(text);
+    g_free(key);
     gtk_label_set_xalign(GTK_LABEL(lb), 0.0);
     gtk_label_set_ellipsize(GTK_LABEL(lb), PANGO_ELLIPSIZE_END);
     gtk_container_add(GTK_CONTAINER(btn), lb);
     gtk_button_set_relief(GTK_BUTTON(btn), GTK_RELIEF_NONE);
-    gtk_widget_set_tooltip_text(btn, _("edit this adjustment and its mask"));
-    g_object_set_data(G_OBJECT(btn), "module", m);
+    gtk_widget_set_tooltip_text(btn, _("select this mask: its adjustments, parts and sliders"));
+    g_object_set_data(G_OBJECT(btn), "module", anchor);
     g_signal_connect(btn, "clicked", G_CALLBACK(_row_clicked), self);
-    if(m == dt_dev_gui_module()) dt_gui_add_class(row, "dt_mask_layer_active");
+    if(active) dt_gui_add_class(row, "dt_mask_layer_active");
 
     // a swatch for the mask, in the overlay's color
     GtkWidget *swatch = gtk_label_new(NULL);
@@ -263,17 +341,59 @@ static void _fill(dt_lib_module_t *self)
     gtk_box_pack_start(GTK_BOX(row), swatch, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), btn, TRUE, TRUE, 0);
     gtk_box_pack_end(GTK_BOX(row), sw, FALSE, FALSE, 0);
+    // one switch for every adjustment of the mask
+    g_object_set_data_full(G_OBJECT(sw), "members", g_list_copy(members), (GDestroyNotify)g_list_free);
+    g_signal_connect(sw, "toggled", G_CALLBACK(_mask_switch_toggled), self);
+
     GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     dt_gui_add_class(card, "dt_mask_layer_card");
     gtk_box_pack_start(GTK_BOX(card), row, FALSE, FALSE, 0);
-    if(m == dt_dev_gui_module())
+    if(active)
     {
       dt_gui_add_class(card, "dt_mask_layer_card_active");
-      gtk_box_pack_start(GTK_BOX(card), _parts_box(self, m), FALSE, FALSE, 0);
+      gtk_box_pack_start(GTK_BOX(card), _parts_box(self, anchor), FALSE, FALSE, 0);
+
+      // the module instances that belong to this mask: each stays a module
+      // of its own, to open, switch off or move in the pipe
+      GtkWidget *inst = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+      dt_gui_add_class(inst, "dt_mask_instances");
+      GtkWidget *head = gtk_label_new(_("adjustments"));
+      gtk_label_set_xalign(GTK_LABEL(head), 0.0);
+      dt_gui_add_class(head, "dt_presets_empty");
+      gtk_box_pack_start(GTK_BOX(inst), head, FALSE, FALSE, 0);
+      for(const GList *k = members; k; k = g_list_next(k))
+      {
+        dt_iop_module_t *o = k->data;
+        GtkWidget *ir = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+        GtkWidget *ib = gtk_button_new_with_label(o->name());
+        gtk_button_set_relief(GTK_BUTTON(ib), GTK_RELIEF_NONE);
+        gtk_widget_set_tooltip_text(ib, _("open this module"));
+        g_object_set_data(G_OBJECT(ib), "module", o);
+        g_signal_connect(ib, "clicked", G_CALLBACK(_row_clicked), self);
+        if(o == focus) dt_gui_add_class(ir, "dt_mask_layer_active");
+        GtkWidget *isw = dtgtk_togglebutton_new(dtgtk_cairo_paint_eye, 0, NULL);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(isw), o->enabled);
+        dt_gui_add_class(isw, "dt_transparent_background");
+        g_object_set_data(G_OBJECT(isw), "module", o);
+        g_signal_connect(isw, "toggled", G_CALLBACK(_switch_toggled), self);
+        gtk_box_pack_start(GTK_BOX(ir), ib, TRUE, TRUE, 0);
+        gtk_box_pack_end(GTK_BOX(ir), isw, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(inst), ir, FALSE, FALSE, 0);
+      }
+      gtk_box_pack_start(GTK_BOX(card), inst, FALSE, FALSE, 4);
+
+      GtkWidget *del = gtk_button_new_with_label(_("delete mask"));
+      dt_gui_add_class(del, "dt_mask_mode");
+      gtk_widget_set_tooltip_text(del, _("delete this mask and, if you agree, its adjustments"));
+      g_object_set_data(G_OBJECT(del), "module", anchor);
+      g_signal_connect(del, "clicked", G_CALLBACK(_delete_clicked), self);
+      gtk_box_pack_start(GTK_BOX(card), del, FALSE, FALSE, 4);
     }
     gtk_box_pack_start(GTK_BOX(d->list), card, FALSE, FALSE, 0);
+    g_list_free(members);
     n++;
   }
+  g_list_free(done);
 
   gtk_widget_set_visible(d->empty, n == 0);
   gtk_widget_show_all(d->list);
