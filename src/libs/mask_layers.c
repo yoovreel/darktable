@@ -472,6 +472,11 @@ static void _queue_rebuild(gpointer instance, dt_lib_module_t *self)
   _queue_refresh(instance, self);
 }
 
+static void _queue_rebuild_module(gpointer instance, dt_iop_module_t *module, dt_lib_module_t *self)
+{
+  _queue_rebuild(instance, self);
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   dt_lib_mask_layers_t *d = g_malloc0(sizeof(dt_lib_mask_layers_t));
@@ -501,7 +506,7 @@ void gui_init(dt_lib_module_t *self)
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_HISTORY_CHANGE, _queue_refresh);
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _queue_rebuild);
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_INITIALIZE, _queue_rebuild);
-  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_MODULE_REMOVE, _queue_rebuild);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_MODULE_REMOVE, _queue_rebuild_module);
   d->poll = g_timeout_add(400, _poll, self);
 }
 

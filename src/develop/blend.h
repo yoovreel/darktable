@@ -992,6 +992,10 @@ gboolean dt_iop_gui_blend_mask_add_part(struct dt_iop_module_t *module, const in
 void dt_iop_gui_blend_mask_invert(struct dt_iop_module_t *module);
 // the mask's parts, as "+name" or "−name" strings to g_free (g_list_free_full)
 GList *dt_iop_gui_blend_mask_parts(struct dt_iop_module_t *module);
+/** the module's mask adjustment sliders (NULL when it has none) and a refresh
+    of their values from the module instances that follow its mask */
+GtkWidget *dt_iop_gui_blend_mask_adjust_box(struct dt_iop_module_t *module);
+void dt_iop_gui_blend_mask_adjust_refresh(struct dt_iop_module_t *module);
 // open the focused module's mask panel where it is hosted, if it is folded
 void dt_iop_gui_blend_masks_panel_show(void);
 // open the focused module's mask panel, wherever it is hosted, going by what is

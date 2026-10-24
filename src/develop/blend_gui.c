@@ -1616,6 +1616,61 @@ static float *_masks_adjust_field(dt_iop_module_t *m, const char *field)
   return (m && m->so && m->so->get_p) ? (float *)m->so->get_p(m->params, field) : NULL;
 }
 
+// an instance made by the adjust sliders is neutral when nothing but those
+// sliders' own parameters could have set it: the defaults with every one of
+// them at 0. It is then removed, so the sliders leave no trace once reset
+static gboolean _masks_adjust_neutral(dt_iop_module_t *m)
+{
+  if(!m->params || !m->default_params || m->params_size <= 0) return FALSE;
+  uint8_t *ref = g_malloc(m->params_size);
+  memcpy(ref, m->default_params, m->params_size);
+  gboolean ok = TRUE;
+  for(int i = 0; i < _N_ADJUSTS && ok; i++)
+  {
+    const _masks_adjust_t *a = &_masks_adjusts[i];
+    if(strcmp(a->op, m->op)) continue;
+    const char *field = a->field ? a->field : "midtones_C";
+    const float *f = _masks_adjust_field(m, field);
+    if(!f) { ok = FALSE; break; }
+    const gsize off = (const uint8_t *)f - (const uint8_t *)m->params;
+    if(off + sizeof(float) > (gsize)m->params_size) { ok = FALSE; break; }
+    *(float *)(ref + off) = 0.0f;
+    if(!a->field)
+    {
+      // the hue means nothing without chroma
+      const float *h = _masks_adjust_field(m, "midtones_H");
+      if(h)
+      {
+        const gsize ho = (const uint8_t *)h - (const uint8_t *)m->params;
+        if(ho + sizeof(float) <= (gsize)m->params_size)
+          memcpy(ref + ho, (const uint8_t *)m->params + ho, sizeof(float));
+      }
+    }
+  }
+  if(ok) ok = !memcmp(ref, m->params, m->params_size);
+  g_free(ref);
+  return ok;
+}
+
+static gboolean _masks_adjust_cleanup_cb(gpointer data)
+{
+  dt_iop_module_t *m = data;
+  dt_develop_t *dev = darktable.develop;
+  if(!dev || !g_list_find(dev->iop, m)) return G_SOURCE_REMOVE;
+  // only an instance that was made for a mask, and named after it
+  if(!m->multi_name_hand_edited || !m->multi_name[0]) return G_SOURCE_REMOVE;
+  if(!_masks_adjust_neutral(m)) return G_SOURCE_REMOVE;
+  // still at rest: no slider of it is held away from 0 by the user
+  dt_iop_module_t *focus = dt_dev_gui_module();
+  dt_iop_gui_delete(m);
+  if(focus && focus != m && g_list_find(dev->iop, focus))
+  {
+    dt_iop_request_focus(focus);
+    dt_iop_gui_set_expanded(focus, TRUE, FALSE);
+  }
+  return G_SOURCE_REMOVE;
+}
+
 static void _masks_adjust_changed(GtkWidget *slider, dt_iop_module_t *src)
 {
   if(darktable.gui->reset) return;
@@ -1671,6 +1726,8 @@ static void _masks_adjust_changed(GtkWidget *slider, dt_iop_module_t *src)
   }
   --darktable.gui->reset;
   dt_dev_add_history_item(darktable.develop, m, TRUE);
+  // back at rest: after a pause, so a drag through 0 does not churn
+  if(m != src && v == 0.0f) g_timeout_add(900, _masks_adjust_cleanup_cb, m);
 }
 
 // the sliders show what the instances they drive hold now
@@ -1881,6 +1938,19 @@ static void _mask_parts_collect(const dt_masks_form_t *g, const gboolean minus, 
     else
       *out = g_list_append(*out, g_strdup_printf("%s%s", minus ? "−" : "+", f->name));
   }
+}
+
+// the "adjust" section of the module's mask panel, for the mask adjustment
+// panel to show in the right column (see libs/mask_adjust.c)
+GtkWidget *dt_iop_gui_blend_mask_adjust_box(dt_iop_module_t *module)
+{
+  const dt_iop_gui_blend_data_t *bd = module ? module->blend_data : NULL;
+  return bd ? bd->masks_adjust_box : NULL;
+}
+
+void dt_iop_gui_blend_mask_adjust_refresh(dt_iop_module_t *module)
+{
+  if(module && module->blend_data) _masks_adjust_refresh(module);
 }
 
 GList *dt_iop_gui_blend_mask_parts(dt_iop_module_t *module)
